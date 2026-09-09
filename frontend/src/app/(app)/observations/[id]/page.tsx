@@ -165,18 +165,29 @@ export default function ObservationDetailPage() {
             lng: obs.longitude,
             label: obs.individual_name || obs.suggested_name || "Sighting",
             captured_at: obs.captured_at,
+            photo_url: stills[0]?.url || null,
+            location: obs.station_name || obs.station_code || null,
+            station_code: obs.station_code,
+            href: `/observations/${obs.id}`,
           },
         ]
       : [];
   const galleryTrack = gallery
     .filter((d) => d.latitude != null && d.longitude != null)
     .sort((a, b) => (a.captured_at || a.created_at).localeCompare(b.captured_at || b.created_at))
-    .map((d) => ({
-      lat: d.latitude as number,
-      lng: d.longitude as number,
-      label: d.individual_name || galleryLabel,
-      captured_at: d.captured_at,
-    }));
+    .map((d) => {
+      const thumb = d.media.find((m) => m.kind !== "video");
+      return {
+        lat: d.latitude as number,
+        lng: d.longitude as number,
+        label: d.individual_name || galleryLabel,
+        captured_at: d.captured_at,
+        photo_url: thumb?.url || null,
+        location: d.station_name || d.station_code || null,
+        station_code: d.station_code,
+        href: `/observations/${d.id}`,
+      };
+    });
 
   return (
     <div className="grid gap-10 lg:grid-cols-2">

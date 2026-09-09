@@ -6,6 +6,8 @@
       "provisional_id": "BOOT-001",
       "side": "R",
       "lighting": "night_flash_color",
+      "latitude": 8.541,
+      "longitude": -83.507,
       "notes": "Side profile, palm frond, dense understory"
     },
     {
@@ -13,6 +15,8 @@
       "provisional_id": "BOOT-002",
       "side": "B",
       "lighting": "day_color",
+      "latitude": 8.5412,
+      "longitude": -83.582,
       "notes": "Frontal / three-quarter, Corcovado-style litter"
     },
     {
@@ -21,6 +25,8 @@
       "side": "R",
       "lighting": "ir_night",
       "station_hint": "GRWJNGLS / CORDILLER",
+      "latitude": 9.392,
+      "longitude": -83.704,
       "captured_hint": "2023-05-21T01:30:00"
     },
     {
@@ -29,6 +35,8 @@
       "side": "R",
       "lighting": "ir_night",
       "station_hint": "ENCANTO / ULA – COSTA RICA",
+      "latitude": 8.701,
+      "longitude": -83.471,
       "captured_hint": "2023-03-05T20:53:00"
     },
     {
@@ -38,6 +46,8 @@
       "lighting": "day_color",
       "morph": "melanistic",
       "station_hint": "GRWJNGLS / AMANCA – COSTA RICA",
+      "latitude": 9.521,
+      "longitude": -84.112,
       "captured_hint": "2024-04-17T16:14:00",
       "notes": "Almost certainly a distinct individual from spotted cats"
     },
@@ -47,6 +57,8 @@
       "side": "L",
       "lighting": "day_color",
       "station_hint": "ARNAUD / CO",
+      "latitude": 8.628,
+      "longitude": -83.725,
       "captured_hint": "2023-12-06T06:55:00"
     }
   ],

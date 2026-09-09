@@ -84,12 +84,19 @@ export default function IndividualProfilePage() {
   const mapped = mine.filter((d) => d.latitude != null && d.longitude != null);
   const track = [...mapped]
     .sort((a, b) => (a.captured_at || a.created_at).localeCompare(b.captured_at || b.created_at))
-    .map((d) => ({
-      lat: d.latitude as number,
-      lng: d.longitude as number,
-      label: ind.display_name,
-      captured_at: d.captured_at,
-    }));
+    .map((d) => {
+      const thumb = d.media.find((m) => m.kind !== "video");
+      return {
+        lat: d.latitude as number,
+        lng: d.longitude as number,
+        label: ind.display_name,
+        captured_at: d.captured_at,
+        photo_url: thumb?.url || null,
+        location: d.station_name || d.station_code || null,
+        station_code: d.station_code,
+        href: `/observations/${d.id}`,
+      };
+    });
 
   const canEdit = isScientist(me?.role);
   const stale = ind.days_since_seen != null && ind.days_since_seen > 180;

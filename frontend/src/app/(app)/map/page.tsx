@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { SightingsMap } from "@/components/SightingsMap";
 import { AdminAccountFilter } from "@/components/AdminFilters";
@@ -9,7 +9,7 @@ import { api, type Individual } from "@/lib/api";
 import { matchesQuery, uniqueSorted } from "@/lib/filter";
 import { useProjectId } from "@/lib/useProjectId";
 
-export default function MapPage() {
+function MapPageInner() {
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<"sightings" | "stations">("sightings");
   const [individualId, setIndividualId] = useState(searchParams.get("individual") || "");
@@ -19,6 +19,8 @@ export default function MapPage() {
   const [individuals, setIndividuals] = useState<Individual[]>([]);
   const [payload, setPayload] = useState<{ points: any[]; track?: any[] }>({ points: [] });
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const projectId = useProjectId();
 
   useEffect(() => {
@@ -34,6 +36,9 @@ export default function MapPage() {
   }, [projectId]);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
     api
       .map(
         mode,
@@ -41,7 +46,21 @@ export default function MapPage() {
         mode === "sightings" ? uploader || undefined : undefined,
         projectId,
       )
-      .then(setPayload);
+      .then((next) => {
+        if (!cancelled) setPayload(next);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPayload({ points: [] });
+          setError(err instanceof Error ? err.message : "Could not load map data");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [mode, individualId, uploader, projectId]);
 
   const selected = useMemo(() => individuals.find((c) => c.id === individualId), [individuals, individualId]);
@@ -63,9 +82,40 @@ export default function MapPage() {
     );
   }, [payload.points, query, individualId, individualOptions, species, grade, mode]);
 
+  const mapPoints = useMemo(
+    () =>
+      visiblePoints.map((p: any) => ({
+        lat: p.lat,
+        lng: p.lng,
+        label: p.label,
+        captured_at: p.captured_at,
+        kind: p.kind,
+        photo_url: p.photo_url,
+        location: p.location,
+        station_code: p.station_code,
+        href: mode === "sightings" && p.id ? `/observations/${p.id}` : undefined,
+      })),
+    [visiblePoints, mode],
+  );
+
+  const track = useMemo(() => {
+    if (mode !== "sightings") return [];
+    const ids = new Set(visiblePoints.map((p: any) => p.id));
+    const source = individualId ? payload.track || visiblePoints : visiblePoints;
+    return source
+      .filter((p: any) => ids.has(p.id) || !individualId)
+      .filter((p: any) => p.lat != null && p.lng != null)
+      .map((p: any) => ({
+        lat: p.lat,
+        lng: p.lng,
+        label: p.label,
+        captured_at: p.captured_at,
+      }));
+  }, [mode, individualId, payload.track, visiblePoints]);
+
   return (
     <div className="space-y-4">
-      <FilterBar query={query} onQuery={setQuery} placeholder="Filter map…" showing={visiblePoints.length} total={(payload.points || []).length}>
+      <FilterBar query={query} onQuery={setQuery} placeholder="Filter map…" showing={mapPoints.length} total={(payload.points || []).length}>
         <AdminAccountFilter value={uploader} onChange={setUploader} label="All uploaders" />
         {mode === "sightings" && (
           <>
@@ -91,7 +141,7 @@ export default function MapPage() {
           <p className="mt-1 text-[0.9375rem] text-ink/55">
             {selected
               ? `Tracking ${selected.display_name} from camera-trap re-sightings — not a GPS collar.`
-              : "All sightings, or pick one individual to follow their movement line."}
+              : "All geotagged sightings and camera stations. Pick one jaguar to follow their trail."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -124,7 +174,17 @@ export default function MapPage() {
           </button>
         </div>
       </div>
-      <SightingsMap points={visiblePoints} track={payload.track || []} height={640} />
+      {error && <p className="text-[13px] text-[var(--signal-warn)]">{error}</p>}
+      {loading && <p className="text-[13px] text-[var(--muted)]">Loading map…</p>}
+      <SightingsMap points={mapPoints} track={individualId ? track : []} height={640} />
     </div>
+  );
+}
+
+export default function MapPage() {
+  return (
+    <Suspense fallback={<p className="text-[var(--muted)]">Loading map…</p>}>
+      <MapPageInner />
+    </Suspense>
   );
 }

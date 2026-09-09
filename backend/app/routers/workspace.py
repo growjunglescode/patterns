@@ -10,6 +10,7 @@ from app.roles import canonical_role
 from app.db import get_db
 from app.models import CameraStation, Detection, Follow, Individual, NamingClaim, Organization, Project, User
 from app.schemas import ProjectOut, StationOut, UserAdminPatch, UserOut
+from app.services import get_storage
 from app.services.identity import generalize
 from app.services.onboarding import resolve_user_project
 from app.services.serialize import claim_out, detection_out, individual_out, user_out
@@ -226,7 +227,11 @@ def map_data(
                 for s in stations
             ],
         }
-    det_stmt = select(Detection).options(selectinload(Detection.individual), selectinload(Detection.station))
+    det_stmt = select(Detection).options(
+        selectinload(Detection.individual),
+        selectinload(Detection.station),
+        selectinload(Detection.media),
+    )
     if project_id:
         det_stmt = det_stmt.where(Detection.project_id == project_id)
     detections = db.scalars(det_stmt).all()
@@ -234,6 +239,7 @@ def map_data(
         detections = [det for det in detections if det.individual_id == individual_id]
     if uploader_id and canonical_role(user.role) == "admin":
         detections = [det for det in detections if det.uploader_id == uploader_id]
+    storage = get_storage()
     points = []
     track = []
     for det in detections:
@@ -242,8 +248,13 @@ def map_data(
         if lat is None:
             continue
         uploader = db.get(User, det.uploader_id) if det.uploader_id else None
-        label = det.individual.name or det.individual.code if det.individual else "Unknown"
+        if det.individual:
+            label = det.individual.name or det.individual.code
+        else:
+            label = "Unassigned jaguar"
         when = det.captured_at or det.created_at
+        photo = next((m for m in (det.media or []) if m.kind in {"photo", "frame"}), None)
+        location = det.station.name if det.station and det.station.name else (det.station.code if det.station else None)
         point = {
             "id": det.id,
             "label": label,
@@ -253,6 +264,10 @@ def map_data(
             "species": det.species,
             "grade": det.grade,
             "individual_id": det.individual_id,
+            "individual_code": det.individual.code if det.individual else None,
+            "station_code": det.station.code if det.station else None,
+            "location": location,
+            "photo_url": storage.public_url(photo.storage_key) if photo else None,
             "uploader_id": det.uploader_id,
             "uploader_name": uploader.display_name if uploader else None,
             "captured_at": when.isoformat() if when else None,

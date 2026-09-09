@@ -127,7 +127,17 @@ def _ensure_project(db: Session, user: User) -> Project:
     return project
 
 
-def _ensure_station(db: Session, project: Project, code: str, name: str) -> CameraStation:
+def _ensure_station(
+    db: Session,
+    project: Project,
+    code: str,
+    name: str,
+    *,
+    latitude: float | None = None,
+    longitude: float | None = None,
+) -> CameraStation:
+    lat = float(latitude) if latitude is not None else DEFAULT_LAT
+    lon = float(longitude) if longitude is not None else DEFAULT_LON
     station = db.scalar(
         select(CameraStation).where(
             CameraStation.project_id == project.id,
@@ -135,19 +145,64 @@ def _ensure_station(db: Session, project: Project, code: str, name: str) -> Came
         )
     )
     if station:
+        if latitude is not None and longitude is not None:
+            station.latitude = lat
+            station.longitude = lon
+            if name and station.name != name:
+                station.name = name
         return station
     station = CameraStation(
         id=str(uuid.uuid4()),
         project_id=project.id,
         code=code,
         name=name,
-        latitude=DEFAULT_LAT,
-        longitude=DEFAULT_LON,
+        latitude=lat,
+        longitude=lon,
         camera_model="fixture-import",
     )
     db.add(station)
     db.flush()
     return station
+
+
+def refresh_fixture_coords(db: Session, project: Project, rows: list[dict]) -> int:
+    """Update station + detection GPS for already-ingested fixture photos."""
+    updated = 0
+    for row in rows:
+        filename = row.get("file")
+        if not filename:
+            continue
+        lat = row.get("latitude")
+        lon = row.get("longitude")
+        if lat is None or lon is None:
+            continue
+        media = db.scalar(
+            select(Media)
+            .join(Detection, Detection.id == Media.detection_id)
+            .where(
+                Detection.project_id == project.id,
+                Media.original_filename == filename,
+            )
+            .limit(1)
+        )
+        if not media or not media.detection:
+            continue
+        det = media.detection
+        det.latitude = float(lat)
+        det.longitude = float(lon)
+        code = _station_code(row.get("station_hint"), row.get("provisional_id") or filename)
+        station_name = (row.get("station_hint") or f"Fixture {code}").split("/")[0].strip()
+        station = _ensure_station(
+            db,
+            project,
+            code,
+            station_name,
+            latitude=float(lat),
+            longitude=float(lon),
+        )
+        det.station_id = station.id
+        updated += 1
+    return updated
 
 
 def _already_ingested(db: Session, project_id: str, filename: str) -> bool:
@@ -181,6 +236,8 @@ def ingest_one(
     code = _station_code(station_hint, provisional)
     station_name = (station_hint or f"Fixture {provisional}").split("/")[0].strip()
     captured = _parse_captured(row.get("captured_hint"))
+    lat = float(row["latitude"]) if row.get("latitude") is not None else DEFAULT_LAT
+    lon = float(row["longitude"]) if row.get("longitude") is not None else DEFAULT_LON
     notes_parts = [
         f"fixture:{provisional}",
         f"lighting:{row.get('lighting') or 'unknown'}",
@@ -200,10 +257,12 @@ def ingest_one(
             "status": "planned",
             "station": code,
             "side": flank,
+            "latitude": lat,
+            "longitude": lon,
             "captured_at": captured.isoformat() if captured else None,
         }
 
-    station = _ensure_station(db, project, code, station_name)
+    station = _ensure_station(db, project, code, station_name, latitude=lat, longitude=lon)
     data = path.read_bytes()
     detection_id = str(uuid.uuid4())
     key = f"{detection_id}/original{path.suffix.lower() or '.jpg'}"
@@ -244,8 +303,8 @@ def ingest_one(
         species=species,
         side=flank,
         captured_at=captured,
-        latitude=station.latitude,
-        longitude=station.longitude,
+        latitude=lat,
+        longitude=lon,
         confidence=analyzed.confidence,
         match_score=round(score, 4) if score is not None else None,
         summary=analyzed.summary,
@@ -314,7 +373,9 @@ def run(directory: Path, *, email: str | None = None, dry_run: bool = False) -> 
         results = []
         for row in catalog:
             results.append(ingest_one(db, user=user, project=project, row=row, dry_run=dry_run))
+        refreshed = 0
         if not dry_run:
+            refreshed = refresh_fixture_coords(db, project, catalog)
             db.commit()
         return {
             "directory": str(directory),
@@ -322,6 +383,7 @@ def run(directory: Path, *, email: str | None = None, dry_run: bool = False) -> 
             "project_id": project.id,
             "project_name": project.name,
             "dry_run": dry_run,
+            "coords_refreshed": refreshed,
             "results": results,
         }
     except Exception:
