@@ -1,4 +1,4 @@
-# Patterns — Azure Container Apps + PostgreSQL + Blob Storage
+// Patterns - Azure Container Apps + PostgreSQL + Blob Storage
 targetScope = 'subscription'
 
 @description('Azure region')
