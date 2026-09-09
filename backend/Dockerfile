@@ -4,7 +4,10 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install runtime deps without heavy optional torch wheels for faster Azure pulls.
+# Recognition falls back to OpenCV when torch is absent.
+RUN grep -vE '^(torch|torchvision)' requirements.txt > /tmp/requirements.prod.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.prod.txt
 
 COPY app ./app
 ENV MEDIA_ROOT=/data/media

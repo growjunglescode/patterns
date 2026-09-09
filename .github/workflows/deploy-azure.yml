@@ -82,21 +82,18 @@ jobs:
           API_URL="${{ steps.out.outputs.api_url }}"
           WEB_URL="${{ steps.out.outputs.web_url }}"
 
-          az containerapp registry set -g "$RG" -n "${PREFIX}-api" --server "$ACR.azurecr.io" --identity system
-          az containerapp registry set -g "$RG" -n "${PREFIX}-web" --server "$ACR.azurecr.io" --identity system || true
-
-          # Prefer admin credentials for first push if system identity not yet granted
           ACR_USER=$(az acr credential show -n "$ACR" --query username -o tsv)
           ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
           az containerapp registry set -g "$RG" -n "${PREFIX}-api" --server "$ACR.azurecr.io" --username "$ACR_USER" --password "$ACR_PASS"
           az containerapp registry set -g "$RG" -n "${PREFIX}-web" --server "$ACR.azurecr.io" --username "$ACR_USER" --password "$ACR_PASS"
 
-          az containerapp update -g "$RG" -n "${PREFIX}-api" \
-            --image "$ACR.azurecr.io/patterns-api:${{ github.sha }}" \
-            --set-env-vars "CORS_ORIGINS=${WEB_URL}"
-
           az containerapp update -g "$RG" -n "${PREFIX}-web" \
             --image "$ACR.azurecr.io/patterns-web:${{ github.sha }}"
+
+          az containerapp update -g "$RG" -n "${PREFIX}-api" \
+            --image "$ACR.azurecr.io/patterns-api:${{ github.sha }}" \
+            --set-env-vars "CORS_ORIGINS=${WEB_URL}" \
+            --cpu 1.0 --memory 2Gi
 
           echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Web: ${WEB_URL}" >> "$GITHUB_STEP_SUMMARY"
