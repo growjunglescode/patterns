@@ -1,0 +1,103 @@
+name: Deploy to Azure
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "infra/**"
+      - "docker-compose.yml"
+      - ".github/workflows/deploy-azure.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PREFIX: patterns
+  LOCATION: eastus2
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure resource group + platform
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${POSTGRES_PASSWORD:-}" ]; then
+            echo "Set repo secret POSTGRES_PASSWORD first."
+            exit 1
+          fi
+          az deployment sub create \
+            --name patterns-platform \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters prefix="$PREFIX" location="$LOCATION" postgresPassword="$POSTGRES_PASSWORD"
+
+      - name: Read ACR + app URLs
+        id: out
+        run: |
+          set -euo pipefail
+          RG="${PREFIX}-rg"
+          ACR=$(az acr list -g "$RG" --query "[0].name" -o tsv)
+          API_FQDN=$(az containerapp show -g "$RG" -n "${PREFIX}-api" --query "properties.configuration.ingress.fqdn" -o tsv)
+          WEB_FQDN=$(az containerapp show -g "$RG" -n "${PREFIX}-web" --query "properties.configuration.ingress.fqdn" -o tsv)
+          echo "acr=$ACR" >> "$GITHUB_OUTPUT"
+          echo "api_url=https://${API_FQDN}" >> "$GITHUB_OUTPUT"
+          echo "web_url=https://${WEB_FQDN}" >> "$GITHUB_OUTPUT"
+          echo "API: https://${API_FQDN}"
+          echo "WEB: https://${WEB_FQDN}"
+
+      - name: Build & push images
+        run: |
+          set -euo pipefail
+          ACR="${{ steps.out.outputs.acr }}"
+          az acr login -n "$ACR"
+          docker build -t "$ACR.azurecr.io/patterns-api:${{ github.sha }}" ./backend
+          docker build \
+            --build-arg "NEXT_PUBLIC_API_URL=${{ steps.out.outputs.api_url }}" \
+            -t "$ACR.azurecr.io/patterns-web:${{ github.sha }}" \
+            ./frontend
+          docker push "$ACR.azurecr.io/patterns-api:${{ github.sha }}"
+          docker push "$ACR.azurecr.io/patterns-web:${{ github.sha }}"
+
+      - name: Update Container Apps
+        run: |
+          set -euo pipefail
+          RG="${PREFIX}-rg"
+          ACR="${{ steps.out.outputs.acr }}"
+          API_URL="${{ steps.out.outputs.api_url }}"
+          WEB_URL="${{ steps.out.outputs.web_url }}"
+
+          az containerapp registry set -g "$RG" -n "${PREFIX}-api" --server "$ACR.azurecr.io" --identity system
+          az containerapp registry set -g "$RG" -n "${PREFIX}-web" --server "$ACR.azurecr.io" --identity system || true
+
+          # Prefer admin credentials for first push if system identity not yet granted
+          ACR_USER=$(az acr credential show -n "$ACR" --query username -o tsv)
+          ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
+          az containerapp registry set -g "$RG" -n "${PREFIX}-api" --server "$ACR.azurecr.io" --username "$ACR_USER" --password "$ACR_PASS"
+          az containerapp registry set -g "$RG" -n "${PREFIX}-web" --server "$ACR.azurecr.io" --username "$ACR_USER" --password "$ACR_PASS"
+
+          az containerapp update -g "$RG" -n "${PREFIX}-api" \
+            --image "$ACR.azurecr.io/patterns-api:${{ github.sha }}" \
+            --set-env-vars "CORS_ORIGINS=${WEB_URL}"
+
+          az containerapp update -g "$RG" -n "${PREFIX}-web" \
+            --image "$ACR.azurecr.io/patterns-web:${{ github.sha }}"
+
+          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Web: ${WEB_URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API: ${API_URL}" >> "$GITHUB_STEP_SUMMARY"
