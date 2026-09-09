@@ -1,0 +1,80 @@
+[
+  {
+    "file": "01_night_flash_side.jpg",
+    "label": "jaguar",
+    "confidence": 0.5257,
+    "is_jaguar": true,
+    "box": [
+      755,
+      303,
+      194,
+      249
+    ],
+    "summary": "Spotted felid pattern detected (IR trail-cam, confidence 53%). Coat fingerprint extracted for individual matching."
+  },
+  {
+    "file": "02_day_frontal_corcovado.jpg",
+    "label": "jaguar",
+    "confidence": 0.7172,
+    "is_jaguar": true,
+    "box": [
+      0,
+      0,
+      1024,
+      565
+    ],
+    "summary": "Spotted felid pattern detected (color, confidence 72%). Coat fingerprint extracted for individual matching."
+  },
+  {
+    "file": "03_ir_cordiller_grwjngls.jpg",
+    "label": "jaguar",
+    "confidence": 0.4034,
+    "is_jaguar": true,
+    "box": [
+      71,
+      64,
+      821,
+      469
+    ],
+    "summary": "Spotted felid pattern detected (color, confidence 40%). Coat fingerprint extracted for individual matching."
+  },
+  {
+    "file": "04_ir_encanto_ula.jpg",
+    "label": "jaguar",
+    "confidence": 0.4031,
+    "is_jaguar": true,
+    "box": [
+      153,
+      80,
+      716,
+      373
+    ],
+    "summary": "Spotted felid pattern detected (color, confidence 40%). Coat fingerprint extracted for individual matching."
+  },
+  {
+    "file": "05_melanistic_amanca.jpg",
+    "label": "jaguar",
+    "confidence": 0.6631,
+    "is_jaguar": true,
+    "box": [
+      0,
+      0,
+      636,
+      533
+    ],
+    "summary": "Spotted felid pattern detected (color, confidence 66%). Coat fingerprint extracted for individual matching."
+  },
+  {
+    "file": "06_day_arnaud_co.jpg",
+    "label": "jaguar",
+    "confidence": 0.4802,
+    "is_jaguar": true,
+    "box": [
+      0,
+      0,
+      1024,
+      532
+    ],
+    "summary": "Spotted felid pattern detected (color, confidence 48%). Coat fingerprint extracted for individual matching."
+  }
+]

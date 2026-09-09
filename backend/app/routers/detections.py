@@ -25,7 +25,7 @@ from app.services.identity import (
     grade_detection,
     next_code,
 )
-from app.services.species import canonical_species, is_identifiable_species, normalize_side
+from app.services.species import canonical_species, is_identifiable_species, normalize_side, require_jaguar
 from app.services.recognition import (
     REVIEW_AWAITING_SECOND,
     REVIEW_CONFIRMED,
@@ -359,10 +359,23 @@ def confirm_detection(
         raise HTTPException(status_code=404, detail="Detection not found")
     if not is_identifiable_species(db, detection.species):
         raise HTTPException(status_code=400, detail="Confirm the species before matching or naming")
+    try:
+        require_jaguar(detection.species)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Identity work always requires a human and a map location (EXIF or manual).
+    if not payload.reject and (detection.latitude is None or detection.longitude is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Add GPS or choose a camera station before matching or naming this jaguar",
+        )
     if payload.side:
         detection.side = normalize_side(payload.side)
     if payload.species:
-        detection.species = payload.species
+        try:
+            detection.species = require_jaguar(payload.species)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     recognition = get_recognition_service()
     embedding = _opencv_embedding(detection)
@@ -389,7 +402,10 @@ def confirm_detection(
         )
         audit(db, user, "reject_match", "detection", detection.id, suggested_id)
     elif payload.create_new:
-        species = canonical_species(db, detection.species)
+        try:
+            species = require_jaguar(canonical_species(db, detection.species))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         individual = Individual(
             project_id=detection.project_id,
             code=next_code(db, species),
@@ -508,6 +524,19 @@ def patch_metadata(
             if snapped:
                 detection.station_id = snapped.id
         detection.metadata_source = f"{detection.metadata_source or ''},manual_gps".strip(",")
+    elif payload.latitude is not None or payload.longitude is not None:
+        raise HTTPException(status_code=400, detail="Provide both latitude and longitude")
+    if (
+        detection.latitude is None
+        and detection.longitude is None
+        and not payload.station_id
+        and payload.captured_at is None
+        and payload.notes is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Choose a camera station or enter latitude and longitude",
+        )
     if payload.captured_at:
         try:
             detection.captured_at = datetime.fromisoformat(payload.captured_at.replace("Z", "+00:00"))
@@ -535,6 +564,10 @@ def assert_species(
     if detection.uploader_id != user.id and canonical_role(user.role) not in {"admin", "scientist"}:
         raise HTTPException(status_code=403, detail="Not allowed")
     slug = canonical_species(db, payload.species)
+    try:
+        slug = require_jaguar(slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not is_identifiable_species(db, slug):
         raise HTTPException(status_code=400, detail="Unknown or non-pattern species")
     detection.species = slug

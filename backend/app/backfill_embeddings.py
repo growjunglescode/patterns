@@ -145,7 +145,18 @@ def run_backfill(
     out: Callable[[str], None] = print,
 ) -> BackfillReport:
     report = BackfillReport(dry_run=dry_run)
-    encoder = engine or EmbeddingRecognitionEngine()
+    from app.services.recognition.service import get_recognition_service
+    from app.services.recognition.trained_engine import TrainedCoatEngine
+
+    encoder = engine
+    if encoder is None:
+        active = get_recognition_service().engine
+        if getattr(active, "stores_coat_embeddings", False) and hasattr(active, "encode_gallery_image"):
+            encoder = active  # type: ignore[assignment]
+        elif TrainedCoatEngine().available():
+            encoder = TrainedCoatEngine()  # type: ignore[assignment]
+        else:
+            encoder = EmbeddingRecognitionEngine()
     if not encoder.available():
         raise ModelUnavailable(MODEL_HELP)
 

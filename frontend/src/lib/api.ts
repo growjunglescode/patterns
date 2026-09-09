@@ -24,7 +24,10 @@ export type User = {
 export type Detection = {
   id: string;
   project_name: string | null;
+  country?: string | null;
+  region?: string | null;
   station_code: string | null;
+  station_name?: string | null;
   individual_id: string | null;
   individual_code: string | null;
   individual_name: string | null;
@@ -37,6 +40,8 @@ export type Detection = {
   second_reviewer_name?: string | null;
   second_reviewer_id?: string | null;
   species: string;
+  scientific_name?: string | null;
+  common_name?: string | null;
   side: string;
   captured_at: string | null;
   latitude: number | null;
@@ -51,12 +56,14 @@ export type Detection = {
   candidates: { id: string; code: string; display_name: string; score: number }[];
   missing_location?: boolean;
   missing_time?: boolean;
+  location_from_exif?: boolean;
   camera_make?: string | null;
   camera_model?: string | null;
   metadata_source?: string | null;
   identity_status?: string | null;
   known_match?: boolean;
   needs_name?: boolean;
+  can_register_new?: boolean;
   is_identifiable?: boolean;
   needs_species_confirm?: boolean;
   engine?: string | null;
@@ -104,11 +111,15 @@ export type Individual = {
   code: string;
   display_name: string;
   species: string;
+  common_name?: string | null;
+  scientific_name?: string | null;
   sex: string | null;
   life_status: string;
   identity_status: string;
   detection_count: number;
   project_name: string | null;
+  country?: string | null;
+  region?: string | null;
   share_public?: boolean;
   first_seen?: string | null;
   last_seen?: string | null;
@@ -383,6 +394,10 @@ export const api = {
     return request<any>(`/api/admin/audit${qs ? `?${qs}` : ""}`);
   },
   adminRecognition: (page = 1) => request<any>(`/api/admin/recognition?page=${page}&page_size=40`),
+  adminRecognitionExport: () => request<any>("/api/admin/recognition/export", { method: "POST", body: "{}" }),
+  adminRecognitionTrain: (body: { force?: boolean; epochs?: number; activate?: boolean; backfill?: boolean } = {}) =>
+    request<any>("/api/admin/recognition/train", { method: "POST", body: JSON.stringify(body) }),
+  adminRecognitionActivate: () => request<any>("/api/admin/recognition/activate", { method: "POST", body: "{}" }),
   shareIndividual: (id: string, share_public: boolean) =>
     request<Individual>(`/api/individuals/${id}/sharing`, { method: "PATCH", body: JSON.stringify({ share_public }) }),
   publicPerson: (id: string) => request<any>(`/api/public/people/${id}`),

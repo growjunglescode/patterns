@@ -17,7 +17,7 @@ from app.services import get_storage
 from app.services.identity import detection_count, display_label, generalize
 from app.services.recognition import get_recognition_service
 from app.services.monitoring import individual_monitoring
-from app.services.species import is_identifiable_species
+from app.services.species import common_name_for, is_identifiable_species, scientific_name_for
 
 
 def user_out(user: User, photo_count: int = 0) -> UserOut:
@@ -54,6 +54,25 @@ def media_out(item: Media) -> MediaOut:
     )
 
 
+def _project_region(project) -> str | None:
+    if not project:
+        return None
+    region = (getattr(project, "region", None) or "").strip()
+    return region or None
+
+
+def _project_country(project) -> str | None:
+    """Country is stored in project.region (often 'Region · Country')."""
+    region = _project_region(project)
+    if not region:
+        return None
+    if "·" in region:
+        return region.split("·")[-1].strip() or None
+    if "," in region:
+        return region.split(",")[-1].strip() or None
+    return region
+
+
 def individual_out(
     db: Session,
     individual: Individual,
@@ -62,18 +81,23 @@ def individual_out(
     stats = monitoring if monitoring is not None else individual_monitoring(db, individual.id)
     editor_id = getattr(individual, "details_updated_by_id", None)
     editor = db.get(User, editor_id) if editor_id else None
+    project = individual.project
     return IndividualOut(
         id=individual.id,
         code=individual.code,
         display_name=display_label(individual),
         species=individual.species,
+        common_name=common_name_for(db, individual.species) if individual.species else None,
+        scientific_name=scientific_name_for(db, individual.species) if individual.species else None,
         sex=individual.sex,
         life_status=individual.life_status,
         identity_status=individual.identity_status,
         named_by_id=individual.named_by_id,
         detection_count=detection_count(db, individual.id),
         project_id=individual.project_id,
-        project_name=individual.project.name if individual.project else None,
+        project_name=project.name if project else None,
+        country=_project_country(project),
+        region=_project_region(project),
         share_public=bool(getattr(individual, "share_public", False)),
         created_at=individual.created_at,
         first_seen=stats.get("first_seen"),
@@ -121,11 +145,24 @@ def detection_out(
     named = identity_status == "named"
     identifiable = is_identifiable_species(db, detection.species)
     needs_species = not identifiable
+    missing_location = detection.latitude is None or detection.longitude is None
+    source = (getattr(detection, "metadata_source", None) or "").lower()
+    location_from_exif = "exif_gps" in source
+    can_register_new = (
+        identifiable
+        and not detection.individual_id
+        and not named
+        and (detection.species or "").lower() == "jaguar"
+    )
+    project = detection.project
     return DetectionOut(
         id=detection.id,
         project_id=detection.project_id,
-        project_name=detection.project.name if detection.project else None,
+        project_name=project.name if project else None,
+        country=_project_country(project),
+        region=_project_region(project),
         station_code=station.code if station else None,
+        station_name=station.name if station else None,
         individual_id=detection.individual_id,
         individual_code=individual.code if individual else None,
         individual_name=display_label(individual) if individual else None,
@@ -138,6 +175,8 @@ def detection_out(
         second_reviewer_name=second.display_name if second else None,
         second_reviewer_id=getattr(detection, "second_reviewer_id", None),
         species=detection.species,
+        scientific_name=scientific_name_for(db, detection.species) if detection.species else None,
+        common_name=common_name_for(db, detection.species) if detection.species else None,
         side=detection.side,
         captured_at=detection.captured_at,
         latitude=lat,
@@ -153,14 +192,16 @@ def detection_out(
             CandidateOut(id=ind.id, code=ind.code, display_name=display_label(ind), score=round(score, 4))
             for ind, score in (candidates or [])
         ],
-        missing_location=detection.latitude is None or detection.longitude is None,
+        missing_location=missing_location,
         missing_time=detection.captured_at is None,
+        location_from_exif=location_from_exif,
         camera_make=detection.camera_make,
         camera_model=detection.camera_model,
         metadata_source=detection.metadata_source,
         identity_status=identity_status,
         known_match=named,
         needs_name=bool(individual) and not named and identity_status != "under_review",
+        can_register_new=can_register_new,
         is_identifiable=identifiable,
         needs_species_confirm=needs_species,
         engine=getattr(detection, "recognition_engine", None),

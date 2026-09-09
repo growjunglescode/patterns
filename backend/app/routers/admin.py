@@ -554,6 +554,12 @@ def recognition(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin")),
 ) -> dict:
+    from dataclasses import asdict
+
+    from app.config import get_settings
+    from app.export_train_set import assess_readiness
+    from app.services.recognition.service import get_recognition_service
+
     total = _count(db, MatchReview)
     rows = db.scalars(
         select(MatchReview).order_by(MatchReview.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
@@ -562,6 +568,12 @@ def recognition(
     detections = {row.id: row for row in db.scalars(select(Detection)).all()}
     individuals = {row.id: row for row in db.scalars(select(Individual)).all()}
     scored = [row.was_correct for row in db.scalars(select(MatchReview)).all() if row.was_correct is not None]
+    settings = get_settings()
+    service = get_recognition_service()
+    readiness = assess_readiness(db)
+    from app.services.recognition.train_pipeline import status as train_status
+
+    pipe = train_status(db)
     return {
         "total": total,
         "page": page,
@@ -569,6 +581,15 @@ def recognition(
         "scored": len(scored),
         "correct": sum(1 for item in scored if item),
         "incorrect": sum(1 for item in scored if item is False),
+        "engine": {
+            "name": service.engine.name,
+            "model_version": service.engine.model_version,
+            "stores_coat_embeddings": bool(getattr(service.engine, "stores_coat_embeddings", False)),
+            "recognition_engine_setting": settings.recognition_engine,
+            "coat_model_path": settings.coat_model_path or pipe.get("active", {}).get("coat_model_path"),
+        },
+        "training": asdict(readiness),
+        "pipeline": pipe,
         "rows": [
             {
                 "id": row.id,
@@ -587,3 +608,55 @@ def recognition(
             for row in rows
         ],
     }
+
+
+class TrainRequest(BaseModel):
+    force: bool = False
+    epochs: int = 12
+    activate: bool = True
+    backfill: bool = True
+
+
+@router.post("/recognition/export")
+def recognition_export(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin")),
+) -> dict:
+    from app.services.recognition.train_pipeline import run_export
+
+    try:
+        return run_export(db, actor=user)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/recognition/train")
+def recognition_train(
+    payload: TrainRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin")),
+) -> dict:
+    from app.services.recognition.train_pipeline import run_activate, run_train
+
+    try:
+        result = run_train(db, actor=user, force=payload.force, epochs=max(1, min(payload.epochs, 40)))
+        if payload.activate:
+            result["activate"] = run_activate(db, actor=user, backfill=payload.backfill)
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/recognition/activate")
+def recognition_activate(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin")),
+) -> dict:
+    from app.services.recognition.train_pipeline import run_activate
+
+    try:
+        return run_activate(db, actor=user, backfill=True)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

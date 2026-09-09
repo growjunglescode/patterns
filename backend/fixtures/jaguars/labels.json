@@ -1,0 +1,67 @@
+{
+  "note": "Provisional catalog only. Do not treat similarity hints as confirmed identity. Humans decide merges in Patterns review.",
+  "photos": [
+    {
+      "file": "01_night_flash_side.jpg",
+      "provisional_id": "BOOT-001",
+      "side": "R",
+      "lighting": "night_flash_color",
+      "notes": "Side profile, palm frond, dense understory"
+    },
+    {
+      "file": "02_day_frontal_corcovado.jpg",
+      "provisional_id": "BOOT-002",
+      "side": "B",
+      "lighting": "day_color",
+      "notes": "Frontal / three-quarter, Corcovado-style litter"
+    },
+    {
+      "file": "03_ir_cordiller_grwjngls.jpg",
+      "provisional_id": "BOOT-003",
+      "side": "R",
+      "lighting": "ir_night",
+      "station_hint": "GRWJNGLS / CORDILLER",
+      "captured_hint": "2023-05-21T01:30:00"
+    },
+    {
+      "file": "04_ir_encanto_ula.jpg",
+      "provisional_id": "BOOT-004",
+      "side": "R",
+      "lighting": "ir_night",
+      "station_hint": "ENCANTO / ULA – COSTA RICA",
+      "captured_hint": "2023-03-05T20:53:00"
+    },
+    {
+      "file": "05_melanistic_amanca.jpg",
+      "provisional_id": "BOOT-005",
+      "side": "B",
+      "lighting": "day_color",
+      "morph": "melanistic",
+      "station_hint": "GRWJNGLS / AMANCA – COSTA RICA",
+      "captured_hint": "2024-04-17T16:14:00",
+      "notes": "Almost certainly a distinct individual from spotted cats"
+    },
+    {
+      "file": "06_day_arnaud_co.jpg",
+      "provisional_id": "BOOT-006",
+      "side": "L",
+      "lighting": "day_color",
+      "station_hint": "ARNAUD / CO",
+      "captured_hint": "2023-12-06T06:55:00"
+    }
+  ],
+  "similarity_hints_opencv": [
+    {
+      "a": "02_day_frontal_corcovado.jpg",
+      "b": "06_day_arnaud_co.jpg",
+      "score": 0.9,
+      "advice": "Review manually — frontal pose can inflate OpenCV similarity"
+    },
+    {
+      "a": "03_ir_cordiller_grwjngls.jpg",
+      "b": "04_ir_encanto_ula.jpg",
+      "score": 0.926,
+      "advice": "Review manually — IR fingerprints often cluster; stations differ"
+    }
+  ]
+}

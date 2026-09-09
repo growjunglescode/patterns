@@ -47,6 +47,12 @@ def startup() -> None:
             Base.metadata.create_all(bind=engine)
     settings.media_root.mkdir(parents=True, exist_ok=True)
     ensure_columns()
+    try:
+        from app.services.recognition.train_pipeline import apply_active_engine_overrides
+
+        apply_active_engine_overrides()
+    except Exception:
+        pass
     db = SessionLocal()
     try:
         seed_if_empty(db)

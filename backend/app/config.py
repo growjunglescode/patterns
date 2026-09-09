@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     match_threshold: float = 0.82
     suggest_threshold: float = 0.68
-    # opencv | embedding | auto (try ResNet50 embeddings, fall back to OpenCV)
+    # opencv | embedding | trained | auto
     recognition_engine: str = "auto"
+    # Path to coat-reid checkpoint from `python -m app.train_coat_reid`
+    coat_model_path: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

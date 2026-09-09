@@ -17,6 +17,22 @@ function fmtDate(value?: string | null) {
   return new Date(value).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function fmtDateTime(value?: string | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function fmtCoords(lat?: number | null, lng?: number | null) {
+  if (lat == null || lng == null) return "—";
+  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+}
+
 function km(value?: number | null) {
   if (value == null) return "—";
   return `${value < 0.1 ? "<0.1" : value.toFixed(1)} km`;
@@ -86,12 +102,22 @@ export default function IndividualProfilePage() {
         <aside className="surface mb-5 space-y-4 p-5 xl:mb-0">
           <p className="page-kicker">Identity (catalog record)</p>
           <h1 className="page-title mt-1 text-[1.55rem]">{ind.display_name}</h1>
-          <p className="font-mono text-[12px] text-ink/50">
-            {ind.code} · {ind.species}
+          <p className="font-mono text-[12px] text-ink/50">{ind.code}</p>
+          <p className="text-[13px] text-ink/60">
+            {ind.common_name || ind.species}
+            {ind.scientific_name ? (
+              <>
+                {" "}
+                · <em>{ind.scientific_name}</em>
+              </>
+            ) : null}
           </p>
           <dl className="space-y-3 text-[13px]">
             {[
               ["Status", ind.identity_status],
+              ["Country", ind.country || "—"],
+              ["Region", ind.region && ind.region !== ind.country ? ind.region : "—"],
+              ["Project", ind.project_name || "—"],
               ["Sex", ind.sex || "unknown"],
               ["Life", ind.life_status],
               ["Age", ind.age_class || "unknown"],
@@ -102,7 +128,9 @@ export default function IndividualProfilePage() {
             ].map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3 border-b border-ink/[0.06] pb-2">
                 <dt className="text-ink/45">{label}</dt>
-                <dd className="capitalize">{value}</dd>
+                <dd className={label === "Status" || label === "Sex" || label === "Life" || label === "Age" ? "capitalize" : ""}>
+                  {value}
+                </dd>
               </div>
             ))}
           </dl>
@@ -150,8 +178,8 @@ export default function IndividualProfilePage() {
             {selected && (
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] px-4 py-2.5 text-[12.5px] text-ink/50">
                 <span>
-                  {selected.station_code || "No station"} · {flankLabel(selected.side)} ·{" "}
-                  {fmtDate(selected.captured_at || selected.created_at)}
+                  {selected.station_name || selected.station_code || "No station"} · {flankLabel(selected.side)} ·{" "}
+                  {fmtDateTime(selected.captured_at || selected.created_at)}
                 </span>
                 <span className="flex items-center gap-2">
                   <GradeBadge grade={selected.grade} />
@@ -160,6 +188,33 @@ export default function IndividualProfilePage() {
               </div>
             )}
           </div>
+
+          {selected && (
+            <div className="surface p-4">
+              <p className="section-title mb-3">Selected sighting</p>
+              <dl className="grid gap-3 text-[13px] sm:grid-cols-2">
+                {[
+                  ["Taken", fmtDateTime(selected.captured_at || selected.created_at)],
+                  ["Location", selected.station_name || selected.station_code || "—"],
+                  ["Country", selected.country || ind.country || "—"],
+                  ["Coordinates", fmtCoords(selected.latitude, selected.longitude)],
+                  ["Flank", flankLabel(selected.side)],
+                  ["Camera", [selected.camera_make, selected.camera_model].filter(Boolean).join(" ") || "—"],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">{label}</dt>
+                    <dd className="mt-0.5">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {(selected.notes || selected.summary) && (
+                <div className="mt-4 border-t border-[var(--line)] pt-3">
+                  <p className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Scientific notes</p>
+                  <p className="mt-1 whitespace-pre-line text-[13.5px]">{selected.notes || selected.summary}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {candidates.length > 0 && (
             <div className="surface p-4">
@@ -180,30 +235,61 @@ export default function IndividualProfilePage() {
             </div>
           )}
 
-          {track.length > 0 && <SightingsMap points={track} track={track} height={280} />}
+          <div>
+            <div className="mb-2 flex items-end justify-between gap-3">
+              <div>
+                <p className="section-title">Geotags</p>
+                <p className="text-[12.5px] text-ink/45">
+                  {mapped.length} located sighting{mapped.length === 1 ? "" : "s"} on the map
+                </p>
+              </div>
+              <Link href={`/map?individual=${encodeURIComponent(ind.id)}`} className="text-[13px] text-gold">
+                Open full map →
+              </Link>
+            </div>
+            {track.length > 0 ? (
+              <SightingsMap points={track} track={track} height={280} />
+            ) : (
+              <div className="surface flex h-40 items-center justify-center text-[13px] text-ink/45">
+                No GPS yet on linked sightings
+              </div>
+            )}
+          </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {mine.map((d) => {
-              const thumb = d.media.find((m) => m.kind !== "video");
-              const active = d.id === selected?.id;
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => setSelectedId(d.id)}
-                  className={`overflow-hidden rounded-[8px] border ${
-                    active ? "border-[var(--gold)]" : "border-[var(--line)]"
-                  }`}
-                >
-                  {thumb ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={mediaSrc(thumb.url)} alt="" className="h-20 w-full object-cover" />
-                  ) : (
-                    <div className="flex h-20 items-center justify-center text-[11px] text-ink/40">{d.side}</div>
-                  )}
-                </button>
-              );
-            })}
+          <div>
+            <p className="section-title mb-1">Matched gallery</p>
+            <p className="mb-3 text-[12.5px] text-ink/45">
+              All photos confirmed as this jaguar ({mine.length}). Select one to inspect time, place, and notes.
+            </p>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {mine.map((d) => {
+                const thumb = d.media.find((m) => m.kind !== "video");
+                const active = d.id === selected?.id;
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setSelectedId(d.id)}
+                    className={`overflow-hidden rounded-[8px] border text-left ${
+                      active ? "border-[var(--gold)]" : "border-[var(--line)]"
+                    }`}
+                  >
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={mediaSrc(thumb.url)} alt="" className="h-20 w-full object-cover" />
+                    ) : (
+                      <div className="flex h-20 items-center justify-center text-[11px] text-ink/40">{d.side}</div>
+                    )}
+                    <p className="truncate px-1.5 py-1 text-[10px] text-ink/45">
+                      {fmtDate(d.captured_at || d.created_at)}
+                    </p>
+                  </button>
+                );
+              })}
+              {mine.length === 0 && (
+                <p className="col-span-full text-[13px] text-ink/45">No matched photos yet.</p>
+              )}
+            </div>
           </div>
         </section>
 
@@ -304,7 +390,7 @@ export default function IndividualProfilePage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="section-title">Field details</h2>
+          <h2 className="section-title">Scientific notes</h2>
           {canEdit && (
             <button
               type="button"
@@ -326,12 +412,12 @@ export default function IndividualProfilePage() {
         ) : (
           <div className="surface p-6">
             <p className="whitespace-pre-line text-[13.5px]">
-              {ind.physical_notes || "No physical notes recorded."}
+              {ind.physical_notes || "No scientific notes recorded for this jaguar yet."}
             </p>
             <p className="mt-4 text-[12.5px] text-ink/45">
               {ind.details_updated_by
                 ? `Last updated by ${ind.details_updated_by} on ${fmtDate(ind.details_updated_at)}.`
-                : "Never edited. Sex and life status on demo records were assigned by the seed script."}
+                : "Identity notes, scars, morph, and field remarks belong here."}
             </p>
           </div>
         )}
@@ -419,11 +505,11 @@ function DetailsForm({
         </label>
       </div>
       <label className="mt-4 block text-[13px]">
-        <span className="kpi-label !mt-0 block">Physical notes</span>
+        <span className="kpi-label !mt-0 block">Scientific notes</span>
         <textarea
           className="mt-1.5"
           rows={3}
-          placeholder="Scars, ear notches, tail kinks…"
+          placeholder="Scars, ear notches, morph, behavior…"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />

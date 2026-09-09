@@ -15,6 +15,7 @@ from app.services.identity import ranked_candidates
 from app.services.recognition.embedding_engine import EmbeddingRecognitionEngine
 from app.services.recognition.opencv_engine import OpenCVRecognitionEngine
 from app.services.recognition.ranking import cosine, evaluate_match, group_candidates_by_individual
+from app.services.recognition.trained_engine import TrainedCoatEngine
 from app.services.recognition.types import (
     GALLERY_WARMUP_PHOTOS,
     REVIEW_POTENTIAL,
@@ -38,7 +39,7 @@ class RecognitionEngine(Protocol):
 def requested_engine_name(settings: Settings | None = None) -> str:
     raw = (settings or get_settings()).recognition_engine or "auto"
     name = raw.strip().lower()
-    if name not in {"opencv", "embedding", "auto"}:
+    if name not in {"opencv", "embedding", "trained", "auto"}:
         logger.warning("Unknown RECOGNITION_ENGINE=%s; using auto", raw)
         return "auto"
     return name
@@ -48,11 +49,21 @@ def select_engine(
     requested: str,
     opencv: RecognitionEngine | None = None,
     embedding: RecognitionEngine | None = None,
+    trained: RecognitionEngine | None = None,
 ) -> RecognitionEngine:
     opencv_engine = opencv or OpenCVRecognitionEngine()
     embedding_engine = embedding if embedding is not None else EmbeddingRecognitionEngine()
+    trained_engine = trained if trained is not None else TrainedCoatEngine()
 
     if requested == "opencv":
+        return opencv_engine
+
+    if requested == "trained":
+        if trained_engine.available():
+            return trained_engine
+        logger.warning("Trained coat engine requested but unavailable; trying embedding/OpenCV")
+        if embedding_engine.available():
+            return embedding_engine
         return opencv_engine
 
     if requested == "embedding":
@@ -61,10 +72,12 @@ def select_engine(
         logger.warning("Embedding engine requested but unavailable; falling back to OpenCV")
         return opencv_engine
 
-    # auto: prefer embeddings, fall back to OpenCV if the model cannot load.
+    # auto: prefer trained coat model, then ImageNet embeddings, then OpenCV.
+    if trained_engine.available():
+        return trained_engine
     if embedding_engine.available():
         return embedding_engine
-    logger.info("Embedding model not available; using OpenCV recognition")
+    logger.info("No ML coat model available; using OpenCV recognition")
     return opencv_engine
 
 
@@ -78,9 +91,10 @@ class RecognitionService:
         settings: Settings | None = None,
         opencv: RecognitionEngine | None = None,
         embedding: RecognitionEngine | None = None,
+        trained: RecognitionEngine | None = None,
     ) -> RecognitionService:
         requested = requested_engine_name(settings)
-        engine = select_engine(requested, opencv=opencv, embedding=embedding)
+        engine = select_engine(requested, opencv=opencv, embedding=embedding, trained=trained)
         logger.info("Recognition engine: %s (%s)", engine.name, engine.model_version)
         return cls(engine)
 
@@ -287,6 +301,9 @@ _service: RecognitionService | None = None
 def get_recognition_service() -> RecognitionService:
     global _service
     if _service is None:
+        from app.services.recognition.train_pipeline import apply_active_engine_overrides
+
+        apply_active_engine_overrides()
         _service = RecognitionService.from_settings()
     return _service
 

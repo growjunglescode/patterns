@@ -49,7 +49,7 @@ Onboarding provisions affiliation, study geography, and station inventory. The f
 | Runtime | Azure Container Apps · ACR |
 | Provisioning | Bicep (`infra/`) · GitHub Actions |
 
-Recognition: computer-vision pipeline with OpenCV baseline; optional embedding engines where provisioned. Production images prioritize deploy reliability over optional heavyweight ML wheels.
+Recognition: computer-vision pipeline with OpenCV baseline; optional embedding / trained coat re-ID engines where provisioned. Production images prioritize deploy reliability over optional heavyweight ML wheels. Training doctrine: [`docs/RECOGNITION.md`](docs/RECOGNITION.md).
 
 Specification reference: [`docs/Patterns_Dossier.pdf`](docs/Patterns_Dossier.pdf).
 

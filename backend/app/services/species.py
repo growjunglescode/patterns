@@ -88,6 +88,32 @@ def canonical_species(db: Session, slug: str | None) -> str:
     return DEFAULT_SPECIES
 
 
+def scientific_name_for(db: Session, slug: str | None) -> str:
+    row = profile_for(db, slug)
+    if row and row.scientific_name:
+        return row.scientific_name
+    key = (slug or "").strip().lower()
+    meta = _FALLBACK.get(key) or _FALLBACK[DEFAULT_SPECIES]
+    return str(meta["scientific_name"])
+
+
+def common_name_for(db: Session, slug: str | None) -> str:
+    row = profile_for(db, slug)
+    if row and row.common_name:
+        return row.common_name
+    key = (slug or "").strip().lower()
+    meta = _FALLBACK.get(key) or _FALLBACK[DEFAULT_SPECIES]
+    return str(meta["common_name"])
+
+
+def require_jaguar(slug: str | None) -> str:
+    """Patterns identity catalog is jaguar-only for this phase."""
+    key = (slug or DEFAULT_SPECIES).strip().lower()
+    if key != "jaguar":
+        raise ValueError("Only jaguars (Panthera onca) can be matched or named in this catalog")
+    return "jaguar"
+
+
 def normalize_side(value: str | None) -> str:
     if not value:
         return "U"

@@ -148,6 +148,8 @@ class IndividualOut(BaseModel):
     code: str
     display_name: str
     species: str
+    common_name: str | None = None
+    scientific_name: str | None = None
     sex: str | None
     life_status: str
     identity_status: str
@@ -155,6 +157,8 @@ class IndividualOut(BaseModel):
     detection_count: int = 0
     project_id: str
     project_name: str | None = None
+    country: str | None = None
+    region: str | None = None
     share_public: bool = False
     created_at: datetime
     # Monitoring layer (derived from confirmed sightings)
@@ -194,7 +198,10 @@ class DetectionOut(BaseModel):
     id: str
     project_id: str
     project_name: str | None = None
+    country: str | None = None
+    region: str | None = None
     station_code: str | None = None
+    station_name: str | None = None
     individual_id: str | None
     individual_code: str | None = None
     individual_name: str | None = None
@@ -207,6 +214,8 @@ class DetectionOut(BaseModel):
     second_reviewer_name: str | None = None
     second_reviewer_id: str | None = None
     species: str
+    scientific_name: str | None = None
+    common_name: str | None = None
     side: str
     captured_at: datetime | None
     latitude: float | None
@@ -221,12 +230,14 @@ class DetectionOut(BaseModel):
     candidates: list[CandidateOut] = []
     missing_location: bool = False
     missing_time: bool = False
+    location_from_exif: bool = False
     camera_make: str | None = None
     camera_model: str | None = None
     metadata_source: str | None = None
     identity_status: str | None = None
     known_match: bool = False
     needs_name: bool = False
+    can_register_new: bool = False
     is_identifiable: bool = False
     needs_species_confirm: bool = False
     engine: str | None = None

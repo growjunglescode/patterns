@@ -109,7 +109,12 @@ def test_evaluate_match_labels_correct_and_incorrect():
 
 
 def test_select_engine_auto_falls_back_when_embedding_unavailable():
-    engine = select_engine("auto", opencv=OpenCVRecognitionEngine(), embedding=_DeadEmbedding())
+    engine = select_engine(
+        "auto",
+        opencv=OpenCVRecognitionEngine(),
+        embedding=_DeadEmbedding(),
+        trained=_DeadEmbedding(),
+    )
     assert engine.name == "opencv"
 
 
@@ -118,13 +123,32 @@ def test_select_engine_embedding_falls_back_when_model_missing():
     assert engine.name == "opencv"
 
 
+def test_select_engine_prefers_trained_when_available():
+    class _Trained(_FakeEmbedding):
+        name = "trained"
+        model_version = "coat-reid-test"
+
+    engine = select_engine(
+        "auto",
+        opencv=OpenCVRecognitionEngine(),
+        embedding=_FakeEmbedding(),
+        trained=_Trained(),
+    )
+    assert engine.name == "trained"
+
+
 def test_select_engine_opencv_never_touches_embedding():
     engine = select_engine("opencv", opencv=OpenCVRecognitionEngine(), embedding=_DeadEmbedding())
     assert engine.name == "opencv"
 
 
 def test_select_engine_auto_prefers_embedding_when_available():
-    engine = select_engine("auto", opencv=OpenCVRecognitionEngine(), embedding=_FakeEmbedding())
+    engine = select_engine(
+        "auto",
+        opencv=OpenCVRecognitionEngine(),
+        embedding=_FakeEmbedding(),
+        trained=_DeadEmbedding(),
+    )
     assert engine.name == "embedding"
 
 

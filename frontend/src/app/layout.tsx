@@ -4,6 +4,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Patterns — Individual Wildlife Intelligence",
   description: "Identity without collars. Starting with jaguars.",
+  icons: {
+    icon: "/brand/favicon.png",
+    apple: "/brand/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

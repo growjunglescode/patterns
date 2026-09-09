@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { SightingsMap } from "@/components/SightingsMap";
 import { AdminAccountFilter } from "@/components/AdminFilters";
 import { FilterBar, FilterSelect } from "@/components/FilterBar";
@@ -9,8 +10,9 @@ import { matchesQuery, uniqueSorted } from "@/lib/filter";
 import { useProjectId } from "@/lib/useProjectId";
 
 export default function MapPage() {
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<"sightings" | "stations">("sightings");
-  const [individualId, setIndividualId] = useState("");
+  const [individualId, setIndividualId] = useState(searchParams.get("individual") || "");
   const [uploader, setUploader] = useState("");
   const [species, setSpecies] = useState("");
   const [grade, setGrade] = useState("");
@@ -18,6 +20,14 @@ export default function MapPage() {
   const [payload, setPayload] = useState<{ points: any[]; track?: any[] }>({ points: [] });
   const [query, setQuery] = useState("");
   const projectId = useProjectId();
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("individual") || "";
+    if (fromUrl) {
+      setIndividualId(fromUrl);
+      setMode("sightings");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     api.individuals(undefined, projectId).then(setIndividuals).catch(() => undefined);

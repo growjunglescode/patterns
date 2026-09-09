@@ -71,7 +71,19 @@ export default function UploadPage() {
 
   async function confirmKnown(individualId: string) {
     if (!obs) return;
-    setObs(await api.confirm(obs.id, { individual_id: individualId }));
+    if (obs.missing_location) {
+      setError("Add GPS or choose a station before confirming identity");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      setObs(await api.confirm(obs.id, { individual_id: individualId }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not confirm");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function rejectMatch() {
@@ -90,10 +102,23 @@ export default function UploadPage() {
   async function registerNew(e: FormEvent) {
     e.preventDefault();
     if (!obs) return;
+    if (obs.missing_location) {
+      setError("Add GPS or choose a station before registering a new jaguar");
+      return;
+    }
+    if (!name.trim() || name.trim().length < 2) {
+      setError("Enter a proposed name for this jaguar (admin will approve it)");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      setObs(await api.confirm(obs.id, { create_new: true, proposed_name: name || undefined }));
+      if (obs.individual_id && obs.needs_name) {
+        await api.proposeName(obs.individual_id, name.trim());
+        setObs(await api.detection(obs.id));
+      } else {
+        setObs(await api.confirm(obs.id, { create_new: true, proposed_name: name.trim() }));
+      }
       setName("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not register individual");
@@ -133,7 +158,10 @@ export default function UploadPage() {
 
   const knownCandidate = obs?.candidates?.[0];
   const alreadyNamed = Boolean(obs?.known_match);
-  const missing = Boolean(obs && (obs.missing_location || obs.missing_time));
+  const missingLocation = Boolean(obs?.missing_location);
+  const missingTime = Boolean(obs?.missing_time);
+  const missing = missingLocation || missingTime;
+  const locationReady = Boolean(obs && !obs.missing_location);
   const reviewLabel = reviewStateLabel(obs?.review_state);
   const libraryNote = obs?.match_library_note;
   const librarySize = obs?.match_library_size ?? 0;
@@ -141,6 +169,12 @@ export default function UploadPage() {
   const isRejected = obs?.review_state === "rejected_match";
   const isNewIndividual = obs?.review_state === "new_jaguar";
   const isConfirmed = obs?.review_state === "confirmed_match" || alreadyNamed;
+  const canRegister =
+    Boolean(obs?.can_register_new) &&
+    locationReady &&
+    !alreadyNamed &&
+    !askSpecies &&
+    (!isPotential || isRejected || (obs?.candidates?.length ?? 0) === 0);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -199,11 +233,29 @@ export default function UploadPage() {
               Time: {obs.captured_at ? new Date(obs.captured_at).toLocaleString() : "not in EXIF"}
             </p>
             <p>
-              Location: {obs.latitude != null ? `${obs.latitude}, ${obs.longitude}` : "not in EXIF"}
+              Species:{" "}
+              <strong>
+                {obs.common_name || obs.species}
+                {obs.scientific_name ? (
+                  <>
+                    {" "}
+                    (<em>{obs.scientific_name}</em>)
+                  </>
+                ) : null}
+              </strong>
+            </p>
+            <p>
+              Location:{" "}
+              {obs.latitude != null
+                ? `${obs.latitude}, ${obs.longitude}${obs.location_from_exif ? " (from EXIF)" : ""}`
+                : "missing — add below before naming"}
             </p>
             <p className="mt-1 text-[12.5px] text-ink/45">
               Source: {obs.metadata_source || "none"} · {obs.station_code || "no station"} · flank {obs.side || "U"}
               {obs.engine ? ` · ${obs.engine}${obs.model_version ? ` ${obs.model_version}` : ""}` : ""}
+            </p>
+            <p className="mt-2 text-[13px] text-ink/55">
+              Identity is always human-reviewed. The system never assigns a jaguar name on its own.
             </p>
             {reviewLabel && (
               <p className="mt-2 text-[13px] text-ink/55">
@@ -218,9 +270,9 @@ export default function UploadPage() {
           {askSpecies && obs && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/75 p-4 backdrop-blur-[6px]">
               <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[1.6rem] border border-gold/25 bg-canvas p-6 shadow-lift">
-                <p className="section-title">Confirm the species</p>
+                <p className="section-title">Confirm jaguar?</p>
                 <p className="mt-2 text-[13px] text-ink/60">
-                  The photo was not treated as a patterned cat. Choose the species if you are sure, or discard it.
+                  This catalog is jaguar-only (<em>Panthera onca</em>). Confirm if this is a jaguar, or discard the photo.
                 </p>
                 {obs.media.filter((m) => m.kind !== "video").slice(0, 1).map((m) => (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -232,9 +284,7 @@ export default function UploadPage() {
                   value={assertSpecies}
                   onChange={(e) => setAssertSpecies(e.target.value)}
                 >
-                  <option value="jaguar">Jaguar</option>
-                  <option value="ocelot">Ocelot</option>
-                  <option value="margay">Margay</option>
+                  <option value="jaguar">Jaguar — Panthera onca</option>
                 </select>
                 {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
                 <div className="mt-5 flex flex-col gap-2">
@@ -244,7 +294,7 @@ export default function UploadPage() {
                     onClick={pushSpecies}
                     className="btn-gold w-full disabled:opacity-40"
                   >
-                    {busy ? "Pushing…" : "Yes — push this picture"}
+                    {busy ? "Pushing…" : "Yes — this is a jaguar"}
                   </button>
                   <button
                     type="button"
@@ -252,7 +302,7 @@ export default function UploadPage() {
                     onClick={rejectSpecies}
                     className="rounded-full border border-ink/15 bg-white py-2.5 text-sm font-semibold text-ink disabled:opacity-40"
                   >
-                    Not a patterned cat — discard
+                    Not a jaguar — discard
                   </button>
                 </div>
               </div>
@@ -261,33 +311,56 @@ export default function UploadPage() {
 
           {missing && !askSpecies && (
             <form onSubmit={saveMeta} className="space-y-3 rounded-xl border border-gold/40 bg-white p-5 shadow-card">
-              <h2 className="section-title">This file is missing field data</h2>
-              <p className="text-[13px] text-ink/55">Camera traps often omit GPS. Enter location and time so the sighting can go on the map.</p>
-              {obs.missing_time && (
+              <h2 className="section-title">
+                {missingLocation ? "Location required" : "Capture time missing"}
+              </h2>
+              <p className="text-[13px] text-ink/55">
+                {obs.location_from_exif
+                  ? "GPS was read from the file."
+                  : "No GPS in the file EXIF. Choose a camera station or enter coordinates before matching or naming."}
+              </p>
+              {missingTime && (
                 <label className="block text-[13px]">
                   Capture time
-                  <input type="datetime-local" className="mt-1 w-full rounded-lg border px-3 py-2" value={when} onChange={(e) => setWhen(e.target.value)} required />
+                  <input type="datetime-local" className="mt-1 w-full rounded-lg border px-3 py-2" value={when} onChange={(e) => setWhen(e.target.value)} required={missingTime && !missingLocation} />
                 </label>
               )}
-              {obs.missing_location && (
+              {missingLocation && (
                 <>
-                  <select className="w-full rounded-lg border px-3 py-2" value={stationId} onChange={(e) => setStationId(e.target.value)}>
+                  <select
+                    className="w-full rounded-lg border px-3 py-2"
+                    value={stationId}
+                    onChange={(e) => setStationId(e.target.value)}
+                    required={!lat || !lng}
+                  >
                     <option value="">Choose a station, or type coordinates</option>
                     {stations.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.code}
+                        {s.code} — {s.name || s.code}
                       </option>
                     ))}
                   </select>
                   <div className="grid grid-cols-2 gap-2">
-                    <input className="rounded-lg border px-3 py-2" placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} />
-                    <input className="rounded-lg border px-3 py-2" placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} />
+                    <input
+                      className="rounded-lg border px-3 py-2"
+                      placeholder="Latitude"
+                      value={lat}
+                      onChange={(e) => setLat(e.target.value)}
+                      required={!stationId}
+                    />
+                    <input
+                      className="rounded-lg border px-3 py-2"
+                      placeholder="Longitude"
+                      value={lng}
+                      onChange={(e) => setLng(e.target.value)}
+                      required={!stationId}
+                    />
                   </div>
                 </>
               )}
               {error && <p className="text-sm text-red-700">{error}</p>}
               <button disabled={busy} className="rounded-full bg-forest px-4 py-2 text-sm text-canvas">
-                Save metadata
+                Save field location
               </button>
             </form>
           )}
@@ -351,8 +424,11 @@ export default function UploadPage() {
                 <ReviewStateBadge state="potential_match" />
               </div>
               <p className="mt-1 text-[13px] text-ink/55">
-                Top matches — a person must confirm. The app never assigns identity automatically.
+                Top jaguar matches — a person must confirm. The app never assigns identity automatically.
               </p>
+              {!locationReady && (
+                <p className="mt-2 text-[13px] text-gold">Save location above before confirming a match.</p>
+              )}
               {libraryNote && <p className="mt-1 text-[13px] text-gold">{libraryNote}</p>}
               <ul className="mt-3 space-y-2">
                 {obs.candidates.slice(0, 5).map((candidate) => (
@@ -365,8 +441,9 @@ export default function UploadPage() {
                     {user && canName(user.role, user.verified) && (
                       <button
                         type="button"
-                        className="rounded-full bg-forest px-3 py-1 text-xs text-canvas"
+                        className="rounded-full bg-forest px-3 py-1 text-xs text-canvas disabled:opacity-40"
                         onClick={() => confirmKnown(candidate.id)}
+                        disabled={busy || !locationReady}
                       >
                         Confirm
                       </button>
@@ -386,20 +463,26 @@ export default function UploadPage() {
                   onClick={rejectMatch}
                   disabled={busy}
                 >
-                  Reject these matches
+                  Not a match — register as a new jaguar
                 </button>
               )}
             </div>
           )}
 
-          {!askSpecies && !alreadyNamed && (obs.needs_name || !obs.individual_id) && (
+          {(canRegister || (obs.needs_name && locationReady)) && (
             <form onSubmit={registerNew} className="space-y-3 rounded-xl bg-white p-5 shadow-card">
-              <h2 className="section-title">Not in the database</h2>
+              <h2 className="section-title">
+                {obs.individual_id ? "Propose a name" : "No match — name this jaguar"}
+              </h2>
               <p className="text-[13px] text-ink/55">
-                Propose a unique name. An admin must approve it before it becomes canonical. Until then the cat is tracked as a system ID.
+                Species: <strong>Jaguar</strong> (<em>{obs.scientific_name || "Panthera onca"}</em>). Propose a unique common name.
+                An admin must approve it. Until then the animal is tracked by system ID.
               </p>
+              {!locationReady && (
+                <p className="text-[13px] text-gold">Add location first (EXIF was empty).</p>
+              )}
               {user && !canName(user.role, user.verified) && (
-                <p className="text-[13px] text-gold">Only verified scientists can propose names. Ask an admin to verify you, or leave this unnamed.</p>
+                <p className="text-[13px] text-gold">Only verified scientists can propose names. Ask an admin to verify you.</p>
               )}
               {error && <p className="text-sm text-red-700">{error}</p>}
               <input
@@ -408,10 +491,14 @@ export default function UploadPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Proposed name, e.g. Sibú"
                 minLength={2}
-                required={canName(user?.role, user?.verified)}
+                required
+                disabled={!locationReady || !canName(user?.role, user?.verified)}
               />
-              <button disabled={busy || !canName(user?.role, user?.verified)} className="rounded-full bg-gold px-4 py-2 text-sm font-bold text-white disabled:opacity-40">
-                Submit name for admin approval
+              <button
+                disabled={busy || !locationReady || !canName(user?.role, user?.verified)}
+                className="rounded-full bg-gold px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
+              >
+                Register jaguar + submit name for approval
               </button>
             </form>
           )}
