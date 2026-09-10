@@ -49,9 +49,9 @@ export default function HomePage() {
       <section className="relative flex min-h-[42vh] flex-col justify-between overflow-hidden bg-forest text-[#f6f1e6] lg:min-h-screen">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/hero-jaguar-portrait.png"
+          src="/hero-jaguar-home.jpg"
           alt=""
-          className="absolute inset-0 h-full w-full object-cover object-[center_30%]"
+          className="absolute inset-0 h-full w-full object-cover object-[center_35%]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-forest via-forest/50 to-forest/25" />
         <TopoPrint tone="dark" strength="soft" />
