@@ -31,7 +31,11 @@ export default function AdminNamesPage() {
     setError("");
     try {
       const updated = await api.decideClaim(id, approve);
-      setRows((list) => list.map((row) => (row.id === id ? { ...row, ...updated } : row)));
+      setRows((list) =>
+        list
+          .map((row) => (row.id === id ? { ...row, ...updated } : row))
+          .filter((row) => !status || row.status === status),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not decide claim");
     } finally {

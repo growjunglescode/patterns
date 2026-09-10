@@ -605,19 +605,28 @@ def catalog(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin")),
 ) -> dict:
-    det_stmt = select(Detection).order_by(Detection.created_at.desc()).limit(limit)
+    det_stmt = select(Detection).order_by(Detection.created_at.desc())
     if grade:
         det_stmt = det_stmt.where(Detection.grade == grade)
     if review_state:
         det_stmt = det_stmt.where(Detection.review_state == review_state)
     if project_id:
         det_stmt = det_stmt.where(Detection.project_id == project_id)
-    detections = db.scalars(det_stmt).all()
+    detections = db.scalars(det_stmt.limit(limit)).all()
 
-    individuals = db.scalars(select(Individual).order_by(Individual.created_at.desc()).limit(limit)).all()
+    ind_stmt = select(Individual).order_by(Individual.created_at.desc())
     if project_id:
-        individuals = [row for row in individuals if row.project_id == project_id]
-    claims = db.scalars(select(NamingClaim).order_by(NamingClaim.created_at.desc()).limit(limit)).all()
+        ind_stmt = ind_stmt.where(Individual.project_id == project_id)
+    individuals = db.scalars(ind_stmt.limit(limit)).all()
+
+    claim_stmt = select(NamingClaim).order_by(NamingClaim.created_at.desc())
+    if project_id:
+        claim_stmt = (
+            claim_stmt.join(Individual, NamingClaim.individual_id == Individual.id).where(
+                Individual.project_id == project_id
+            )
+        )
+    claims = db.scalars(claim_stmt.limit(limit)).all()
     users = {row.id: row for row in db.scalars(select(User)).all()}
     projects = {row.id: row for row in db.scalars(select(Project)).all()}
     stations = {row.id: row for row in db.scalars(select(CameraStation)).all()}
@@ -677,7 +686,7 @@ def catalog(
     ind_rows = []
     for row in individuals:
         project = projects.get(row.project_id)
-        if not hit(row.code, row.name, row.species, row.identity_status, project.name if project else None):
+        if not hit(row.id, row.code, row.name, row.species, row.identity_status, project.name if project else None):
             continue
         ind_rows.append(
             {
@@ -926,19 +935,28 @@ def patch_species(
     }
 
 
-def _audit_href(entity: str | None, entity_id: str | None) -> str | None:
+def _audit_href(
+    entity: str | None,
+    entity_id: str | None,
+    *,
+    individual_code: str | None = None,
+    user_query: str | None = None,
+) -> str | None:
     if not entity or not entity_id:
         return None
     if entity == "detection":
         return f"/observations/{entity_id}"
     if entity == "individual":
-        return f"/admin/catalog?q={entity_id}"
+        if individual_code:
+            return f"/individuals/{individual_code}"
+        return f"/admin/catalog?tab=individuals&q={entity_id}"
     if entity == "naming_claim":
         return "/admin/names"
     if entity == "project":
         return f"/admin/workspaces/{entity_id}"
     if entity == "user":
-        return f"/admin/people?q={entity_id}"
+        q = user_query or entity_id
+        return f"/admin/people?q={q}"
     if entity == "media":
         return f"/observations/{entity_id}"
     return None
@@ -1027,6 +1045,16 @@ def audit_log(
     page_rows = rows[start : start + page_size]
     actor_ids = {row.actor_id for row in page_rows if row.actor_id}
     actors = {row.id: row for row in db.scalars(select(User).where(User.id.in_(actor_ids))).all()} if actor_ids else {}
+    entity_user_ids = {row.entity_id for row in page_rows if row.entity == "user" and row.entity_id}
+    entity_users = (
+        {row.id: row for row in db.scalars(select(User).where(User.id.in_(entity_user_ids))).all()} if entity_user_ids else {}
+    )
+    entity_ind_ids = {row.entity_id for row in page_rows if row.entity == "individual" and row.entity_id}
+    entity_inds = (
+        {row.id: row for row in db.scalars(select(Individual).where(Individual.id.in_(entity_ind_ids))).all()}
+        if entity_ind_ids
+        else {}
+    )
     actions = sorted({value for (value,) in db.execute(select(AuditLog.action).distinct()).all() if value})
     entities = sorted({value for (value,) in db.execute(select(AuditLog.entity).distinct()).all() if value})
     actors_list = [
@@ -1052,7 +1080,16 @@ def audit_log(
                 "actor_name": actors[row.actor_id].display_name if row.actor_id in actors else None,
                 "actor_email": actors[row.actor_id].email if row.actor_id in actors else None,
                 "sensitive": row.action in SENSITIVE_AUDIT_ACTIONS,
-                "href": _audit_href(row.entity, row.entity_id),
+                "href": _audit_href(
+                    row.entity,
+                    row.entity_id,
+                    individual_code=entity_inds[row.entity_id].code if row.entity_id in entity_inds else None,
+                    user_query=(
+                        entity_users[row.entity_id].email
+                        if row.entity_id in entity_users
+                        else None
+                    ),
+                ),
             }
             for row in page_rows
         ],

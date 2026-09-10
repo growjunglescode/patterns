@@ -54,7 +54,6 @@ function basemapCandidates(dark: boolean): TileConfig[] {
 
 function attachBasemap(L: any, map: any, dark: boolean) {
   const candidates = basemapCandidates(dark);
-  let index = 0;
   let layer: any = null;
 
   const mount = (i: number) => {
@@ -75,11 +74,10 @@ function attachBasemap(L: any, map: any, dark: boolean) {
       }
     });
     layer.addTo(map);
-    // Keep basemap under markers / track
     layer.bringToBack?.();
   };
 
-  mount(index);
+  mount(0);
   return () => {
     if (layer) map.removeLayer(layer);
   };
