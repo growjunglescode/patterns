@@ -15,6 +15,14 @@ export type MapPoint = {
   station_code?: string | null;
 };
 
+function cartoTileUrl(dark: boolean) {
+  const style = dark
+    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+    : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+  const key = (process.env.NEXT_PUBLIC_CARTO_API_KEY || "").trim();
+  return key ? `${style}?key=${encodeURIComponent(key)}` : style;
+}
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -137,15 +145,11 @@ export function SightingsMap({
           attributionControl: true,
         }).setView([9.63, -84.0], 8);
 
-        L.tileLayer(
-          dark
-            ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-          {
-            attribution: "&copy; OpenStreetMap &copy; CARTO",
+        L.tileLayer(cartoTileUrl(dark), {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
             maxZoom: 18,
-          },
-        ).addTo(map);
+            subdomains: "abcd",
+          }).addTo(map);
 
         layerRef.current = L.layerGroup().addTo(map);
         mapRef.current = map;
@@ -185,15 +189,11 @@ export function SightingsMap({
       map.eachLayer((layer: any) => {
         if (layer instanceof L.TileLayer) map.removeLayer(layer);
       });
-      L.tileLayer(
-        dark
-          ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-        {
-          attribution: "&copy; OpenStreetMap &copy; CARTO",
-          maxZoom: 18,
-        },
-      ).addTo(map);
+      L.tileLayer(cartoTileUrl(dark), {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 18,
+        subdomains: "abcd",
+      }).addTo(map);
     })();
     return () => {
       cancelled = true;

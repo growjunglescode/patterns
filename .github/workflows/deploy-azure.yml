@@ -69,6 +69,7 @@ jobs:
           docker build -t "$ACR.azurecr.io/patterns-api:${{ github.sha }}" ./backend
           docker build \
             --build-arg "NEXT_PUBLIC_API_URL=${{ steps.out.outputs.api_url }}" \
+            --build-arg "NEXT_PUBLIC_CARTO_API_KEY=${{ secrets.NEXT_PUBLIC_CARTO_API_KEY }}" \
             -t "$ACR.azurecr.io/patterns-web:${{ github.sha }}" \
             ./frontend
           docker push "$ACR.azurecr.io/patterns-api:${{ github.sha }}"
