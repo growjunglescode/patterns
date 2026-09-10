@@ -15,15 +15,73 @@ export type MapPoint = {
   station_code?: string | null;
 };
 
-function basemapTiles(dark: boolean) {
-  // CARTO raster tiles watermark unless a *valid* basemap key is accepted by their CDN.
-  // The supplied key currently does not clear the watermark, so use Esri street/dark canvas.
-  return {
-    url: dark
-      ? "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
-      : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Tiles &copy; Esri &mdash; Source: Esri, OpenStreetMap contributors",
-    maxZoom: 19,
+type TileConfig = {
+  url: string;
+  attribution: string;
+  maxZoom: number;
+  subdomains?: string;
+};
+
+/** Key-free basemaps. CARTO raster is avoided — it watermarks without a valid basemap key. */
+function basemapCandidates(dark: boolean): TileConfig[] {
+  if (dark) {
+    return [
+      {
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        attribution: "Tiles &copy; Esri",
+        maxZoom: 16,
+      },
+      {
+        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      },
+    ];
+  }
+  return [
+    {
+      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    },
+    {
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+      attribution: "Tiles &copy; Esri &mdash; Source: Esri, OpenStreetMap contributors",
+      maxZoom: 19,
+    },
+  ];
+}
+
+function attachBasemap(L: any, map: any, dark: boolean) {
+  const candidates = basemapCandidates(dark);
+  let index = 0;
+  let layer: any = null;
+
+  const mount = (i: number) => {
+    const cfg = candidates[i];
+    if (!cfg) return;
+    if (layer) map.removeLayer(layer);
+    layer = L.tileLayer(cfg.url, {
+      attribution: cfg.attribution,
+      maxZoom: cfg.maxZoom,
+      subdomains: cfg.subdomains,
+      crossOrigin: true,
+    });
+    let failed = 0;
+    layer.on("tileerror", () => {
+      failed += 1;
+      if (failed >= 3 && i + 1 < candidates.length) {
+        mount(i + 1);
+      }
+    });
+    layer.addTo(map);
+    // Keep basemap under markers / track
+    layer.bringToBack?.();
+  };
+
+  mount(index);
+  return () => {
+    if (layer) map.removeLayer(layer);
   };
 }
 
@@ -97,6 +155,7 @@ export function SightingsMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
+  const detachBasemapRef = useRef<(() => void) | null>(null);
   const [mapHeight, setMapHeight] = useState(height);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -149,12 +208,7 @@ export function SightingsMap({
           attributionControl: true,
         }).setView([9.63, -84.0], 8);
 
-        const tiles = basemapTiles(dark);
-        L.tileLayer(tiles.url, {
-            attribution: tiles.attribution,
-            maxZoom: tiles.maxZoom,
-          }).addTo(map);
-
+        detachBasemapRef.current = attachBasemap(L, map, dark);
         layerRef.current = L.layerGroup().addTo(map);
         mapRef.current = map;
         setReady(true);
@@ -165,6 +219,7 @@ export function SightingsMap({
         });
         resizeObserver.observe(containerRef.current);
         setTimeout(() => map.invalidateSize(), 80);
+        setTimeout(() => map.invalidateSize(), 400);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Map failed to load");
       }
@@ -173,6 +228,8 @@ export function SightingsMap({
     return () => {
       cancelled = true;
       resizeObserver?.disconnect();
+      detachBasemapRef.current?.();
+      detachBasemapRef.current = null;
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -190,14 +247,8 @@ export function SightingsMap({
     (async () => {
       const L = (await import("leaflet")).default;
       if (cancelled || !mapRef.current) return;
-      map.eachLayer((layer: any) => {
-        if (layer instanceof L.TileLayer) map.removeLayer(layer);
-      });
-      const tiles = basemapTiles(dark);
-      L.tileLayer(tiles.url, {
-        attribution: tiles.attribution,
-        maxZoom: tiles.maxZoom,
-      }).addTo(map);
+      detachBasemapRef.current?.();
+      detachBasemapRef.current = attachBasemap(L, map, dark);
     })();
     return () => {
       cancelled = true;
@@ -266,14 +317,14 @@ export function SightingsMap({
 
   return (
     <div className="relative overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--paper)]">
-      <div ref={containerRef} style={{ height: mapHeight, width: "100%" }} />
+      <div ref={containerRef} className="z-0" style={{ height: mapHeight, width: "100%", minHeight: 240 }} />
       {!plotted.length && !error && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--paper)]/70 px-6 text-center text-[13px] text-[var(--muted)]">
+        <div className="pointer-events-none absolute inset-0 z-[400] flex items-center justify-center bg-[var(--paper)]/70 px-6 text-center text-[13px] text-[var(--muted)]">
           No geotagged sightings yet. Confirm GPS or a camera station on an observation to pin it here.
         </div>
       )}
       {error && (
-        <div className="absolute inset-x-0 bottom-0 bg-[#7a2e2e] px-4 py-2 text-[12.5px] text-white">{error}</div>
+        <div className="absolute inset-x-0 bottom-0 z-[500] bg-[#7a2e2e] px-4 py-2 text-[12.5px] text-white">{error}</div>
       )}
     </div>
   );
