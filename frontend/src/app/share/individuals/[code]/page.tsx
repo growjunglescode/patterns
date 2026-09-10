@@ -23,7 +23,7 @@ export default function PublicIndividualPage() {
         <Link href="/">
           <Wordmark />
         </Link>
-        <Link href="/login" className="text-sm font-semibold text-gold-deep">
+        <Link href="/" className="text-sm font-semibold text-gold-deep">
           Sign in
         </Link>
       </header>

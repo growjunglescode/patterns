@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {
-        if (!["/login", "/register", "/", "/onboarding"].includes(pathname)) router.push("/login");
+        if (!["/login", "/register", "/", "/onboarding"].includes(pathname)) router.push("/");
       });
   }, [pathname, router]);
 

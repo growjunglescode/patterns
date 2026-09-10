@@ -34,7 +34,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           router.replace("/overview");
         }
       })
-      .catch(() => router.replace("/login"));
+      .catch(() => router.replace("/"));
   }, [router]);
 
   if (denied) return <p className="text-[var(--muted)]">Admin access only.</p>;

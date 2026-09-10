@@ -52,7 +52,7 @@ export default function RegisterPage() {
           <button className="btn-forest w-full">Continue to profile setup</button>
           <p className="text-sm text-muted">
             Already have access?{" "}
-            <Link href="/login" className="font-semibold text-gold-deep">
+            <Link href="/" className="font-semibold text-gold-deep">
               Sign in
             </Link>
           </p>

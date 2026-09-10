@@ -43,7 +43,7 @@ export default function OnboardingPage() {
         }
         setUser(me);
       })
-      .catch(() => router.replace("/login"));
+      .catch(() => router.replace("/"));
   }, [router]);
 
   const progress = useMemo(() => ((step + 1) / STEPS.length) * 100, [step]);

@@ -72,7 +72,7 @@ export default function ProfileSettingsPage() {
 
   function logout() {
     api.logout();
-    router.push("/login");
+    router.push("/");
   }
 
   if (!user) return <p className="text-ink/40">Loading profile…</p>;
