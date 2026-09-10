@@ -16,6 +16,7 @@ export default function UploadPage() {
   const [obs, setObs] = useState<Detection | null>(null);
   const [askSpecies, setAskSpecies] = useState(false);
   const [assertSpecies, setAssertSpecies] = useState("jaguar");
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
@@ -28,12 +29,26 @@ export default function UploadPage() {
     api.me().then(setUser).catch(() => undefined);
   }, [projectId]);
 
+  useEffect(() => {
+    return () => {
+      if (localPreview) URL.revokeObjectURL(localPreview);
+    };
+  }, [localPreview]);
+
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
       const form = new FormData(e.currentTarget);
+      const file = form.get("file");
+      if (localPreview) {
+        URL.revokeObjectURL(localPreview);
+        setLocalPreview(null);
+      }
+      if (file instanceof File && file.type.startsWith("image/")) {
+        setLocalPreview(URL.createObjectURL(file));
+      }
       const projectId = readProjectId();
       if (projectId) form.set("project_id", projectId);
       const result = await api.upload(form);
@@ -134,6 +149,10 @@ export default function UploadPage() {
       await api.discardDetection(obs.id);
       setObs(null);
       setAskSpecies(false);
+      if (localPreview) {
+        URL.revokeObjectURL(localPreview);
+        setLocalPreview(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not discard");
     } finally {
@@ -268,26 +287,41 @@ export default function UploadPage() {
           </div>
 
           {askSpecies && obs && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/75 p-4 backdrop-blur-[6px]">
-              <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[1.6rem] border border-gold/25 bg-canvas p-6 shadow-lift">
-                <p className="section-title">Confirm jaguar?</p>
-                <p className="mt-2 text-[13px] text-ink/60">
-                  This catalog is jaguar-only (<em>Panthera onca</em>). Confirm if this is a jaguar, or discard the photo.
-                </p>
-                {obs.media.filter((m) => m.kind !== "video").slice(0, 1).map((m) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={m.id} src={mediaSrc(m.url)} alt="Upload preview" className="mt-4 w-full rounded-xl bg-white" />
-                ))}
-                <p className="mt-3 text-[13px] text-ink/55">{obs.summary}</p>
-                <select
-                  className="mt-3 w-full rounded-lg border px-3 py-2"
-                  value={assertSpecies}
-                  onChange={(e) => setAssertSpecies(e.target.value)}
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-forest/80 sm:items-center sm:p-4">
+              <div
+                className="flex w-full max-w-md flex-col overflow-hidden rounded-t-[1.4rem] border border-gold/25 bg-canvas shadow-lift sm:max-h-[90dvh] sm:rounded-[1.6rem]"
+                style={{ maxHeight: "min(100dvh, 100%)" }}
+              >
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-3 pt-5">
+                  <p className="section-title">Confirm jaguar?</p>
+                  <p className="mt-2 text-[13px] leading-snug text-ink/60">
+                    This catalog is jaguar-only (<em>Panthera onca</em>). Confirm if this is a jaguar, or discard the photo.
+                  </p>
+                  {(localPreview || obs.media.some((m) => m.kind !== "video")) && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={
+                        localPreview ||
+                        mediaSrc(obs.media.find((m) => m.kind !== "video")?.url || "")
+                      }
+                      alt=""
+                      className="mt-3 max-h-[32vh] w-full rounded-xl bg-[#0d1210] object-contain sm:max-h-[40vh]"
+                    />
+                  )}
+                  <p className="mt-3 text-[13px] leading-snug text-ink/55">{obs.summary}</p>
+                  <select
+                    className="mt-3 w-full rounded-lg border px-3 py-2.5 text-[15px]"
+                    value={assertSpecies}
+                    onChange={(e) => setAssertSpecies(e.target.value)}
+                  >
+                    <option value="jaguar">Jaguar — Panthera onca</option>
+                  </select>
+                  {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+                </div>
+                <div
+                  className="shrink-0 space-y-2 border-t border-ink/10 bg-canvas px-5 pt-3"
+                  style={{ paddingBottom: "max(0.875rem, env(safe-area-inset-bottom))" }}
                 >
-                  <option value="jaguar">Jaguar — Panthera onca</option>
-                </select>
-                {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
-                <div className="mt-5 flex flex-col gap-2">
                   <button
                     type="button"
                     disabled={busy}
@@ -300,7 +334,7 @@ export default function UploadPage() {
                     type="button"
                     disabled={busy}
                     onClick={rejectSpecies}
-                    className="rounded-full border border-ink/15 bg-white py-2.5 text-sm font-semibold text-ink disabled:opacity-40"
+                    className="w-full rounded-full border border-ink/15 bg-white py-2.5 text-sm font-semibold text-ink disabled:opacity-40"
                   >
                     Not a jaguar — discard
                   </button>
