@@ -15,12 +15,16 @@ export type MapPoint = {
   station_code?: string | null;
 };
 
-function cartoTileUrl(dark: boolean) {
-  const style = dark
-    ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-    : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-  const key = (process.env.NEXT_PUBLIC_CARTO_API_KEY || "").trim();
-  return key ? `${style}?key=${encodeURIComponent(key)}` : style;
+function basemapTiles(dark: boolean) {
+  // CARTO raster tiles watermark unless a *valid* basemap key is accepted by their CDN.
+  // The supplied key currently does not clear the watermark, so use Esri street/dark canvas.
+  return {
+    url: dark
+      ? "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+      : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles &copy; Esri &mdash; Source: Esri, OpenStreetMap contributors",
+    maxZoom: 19,
+  };
 }
 
 function escapeHtml(value: string) {
@@ -145,10 +149,10 @@ export function SightingsMap({
           attributionControl: true,
         }).setView([9.63, -84.0], 8);
 
-        L.tileLayer(cartoTileUrl(dark), {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-            maxZoom: 18,
-            subdomains: "abcd",
+        const tiles = basemapTiles(dark);
+        L.tileLayer(tiles.url, {
+            attribution: tiles.attribution,
+            maxZoom: tiles.maxZoom,
           }).addTo(map);
 
         layerRef.current = L.layerGroup().addTo(map);
@@ -189,10 +193,10 @@ export function SightingsMap({
       map.eachLayer((layer: any) => {
         if (layer instanceof L.TileLayer) map.removeLayer(layer);
       });
-      L.tileLayer(cartoTileUrl(dark), {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxZoom: 18,
-        subdomains: "abcd",
+      const tiles = basemapTiles(dark);
+      L.tileLayer(tiles.url, {
+        attribution: tiles.attribution,
+        maxZoom: tiles.maxZoom,
       }).addTo(map);
     })();
     return () => {
