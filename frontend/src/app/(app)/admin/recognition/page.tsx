@@ -94,7 +94,8 @@ export default function AdminRecognitionPage() {
           <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl tracking-tight">Train coat model</h2>
           <p className="mt-1 max-w-2xl text-[13px] text-white/65">
             Jaguar re-ID (<em className="text-white/80">Panthera onca</em>). Uses only human-confirmed photos plus
-            hard negatives from disagreed reviews. The model proposes — people decide.
+            hard negatives from disagreed reviews. Training is estate-wide; the admin scope chip does not limit this
+            ledger. The model proposes — people decide.
           </p>
         </div>
         <div className="grid gap-4 p-5 lg:grid-cols-[1.4fr_1fr]">

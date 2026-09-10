@@ -107,7 +107,7 @@ def patch_sharing(
 
 @router.get("/naming-claims", response_model=list[NamingClaimOut])
 def list_claims(
-    status: str = "pending",
+    status: str | None = "pending",
     project_id: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -115,9 +115,10 @@ def list_claims(
     stmt = (
         select(NamingClaim)
         .options(selectinload(NamingClaim.individual))
-        .where(NamingClaim.status == status)
         .order_by(NamingClaim.created_at.desc())
     )
+    if status and status != "all":
+        stmt = stmt.where(NamingClaim.status == status)
     rows = db.scalars(stmt).all()
     if project_id:
         rows = [row for row in rows if row.individual and row.individual.project_id == project_id]

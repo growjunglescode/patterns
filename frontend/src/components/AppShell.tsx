@@ -52,7 +52,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           api
             .portfolio()
             .then((p) => {
-              const list = (p?.projects || []).filter((row: { active?: boolean }) => row.active !== false);
+              const all = p?.projects || [];
+              const list =
+                role === "admin" ? all : all.filter((row: { active?: boolean }) => row.active !== false);
               setProjects(list);
               setProjectCount(p?.totals?.projects ?? list.length);
               const saved = readProjectId();

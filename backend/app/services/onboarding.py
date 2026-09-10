@@ -80,8 +80,10 @@ def complete_onboarding(
         user.verified = True
 
     # First account on an empty install becomes admin so solo testing works end-to-end.
+    # Also recover installs that somehow have users but no admin.
     total_users = db.scalar(select(func.count()).select_from(User)) or 0
-    if total_users <= 1:
+    admin_users = db.scalar(select(func.count()).select_from(User).where(User.role == "admin")) or 0
+    if total_users <= 1 or admin_users == 0:
         user.role = "admin"
         user.verified = True
 
@@ -131,6 +133,7 @@ def complete_onboarding(
         region=region,
         active=True,
         organization_id=org.id if org else None,
+        created_by_id=user.id,
     )
     db.add(project)
     db.flush()

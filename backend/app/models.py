@@ -70,6 +70,7 @@ class Project(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
     organization_id: Mapped[Optional[str]] = mapped_column(ForeignKey("organizations.id"), nullable=True, index=True)
+    created_by_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(160))
     slug: Mapped[str] = mapped_column(String(160), unique=True, index=True)
     region: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)

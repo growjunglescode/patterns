@@ -355,6 +355,13 @@ export default function IndividualProfilePage() {
                       (row) => row.code.toLowerCase() === mergeCode.trim().toLowerCase() && row.id !== ind.id,
                     );
                     if (!absorb) throw new Error("No matching individual in this project");
+                    if (
+                      !window.confirm(
+                        `Merge ${absorb.code} into ${ind.code}? Sightings move here and ${absorb.code} is permanently removed.`,
+                      )
+                    ) {
+                      return;
+                    }
                     const updated = await api.mergeIndividuals(ind.id, absorb.id);
                     setInd(updated);
                     setMergeCode("");

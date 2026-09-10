@@ -332,10 +332,13 @@ export const api = {
     }),
   proposeName: (id: string, name: string) =>
     request<NamingClaim>(`/api/individuals/${id}/name`, { method: "POST", body: JSON.stringify({ name }) }),
-  claims: (projectId?: string) =>
-    request<NamingClaim[]>(
-      `/api/naming-claims${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`,
-    ),
+  claims: (projectId?: string, status: string = "pending") => {
+    const p = new URLSearchParams();
+    if (projectId) p.set("project_id", projectId);
+    if (status) p.set("status", status);
+    const qs = p.toString();
+    return request<NamingClaim[]>(`/api/naming-claims${qs ? `?${qs}` : ""}`);
+  },
   decideClaim: (id: string, approve: boolean) =>
     request<NamingClaim>(`/api/naming-claims/${id}/decision`, { method: "POST", body: JSON.stringify({ approve }) }),
   projectData: (projectId: string) => request<any[]>(`/api/projects/${projectId}/data`),
@@ -369,8 +372,26 @@ export const api = {
   adminOverview: () => request<any>("/api/admin/overview"),
   adminPeople: () => request<any[]>("/api/admin/people"),
   adminEstate: () => request<any>("/api/admin/estate"),
+  adminWorkspace: (id: string) => request<any>(`/api/admin/workspaces/${id}`),
+  adminCreateProject: (body: {
+    name: string;
+    region?: string | null;
+    organization_id?: string | null;
+    organization_name?: string | null;
+    owner_user_id?: string | null;
+    active?: boolean;
+  }) => request<any>("/api/admin/projects", { method: "POST", body: JSON.stringify(body) }),
   adminPatchProject: (id: string, body: object) =>
     request<any>(`/api/admin/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminAddMember: (projectId: string, body: { user_id: string; member_role?: string }) =>
+    request<any>(`/api/admin/projects/${projectId}/members`, { method: "POST", body: JSON.stringify(body) }),
+  adminRemoveMember: (projectId: string, userId: string) =>
+    request<any>(`/api/admin/projects/${projectId}/members/${userId}`, { method: "DELETE" }),
+  adminSetHomeProject: (userId: string, projectId: string | null) =>
+    request<any>(`/api/admin/people/${userId}/home-project`, {
+      method: "PATCH",
+      body: JSON.stringify({ project_id: projectId }),
+    }),
   adminCatalog: (params?: { q?: string; grade?: string; review_state?: string; project_id?: string }) => {
     const p = new URLSearchParams();
     if (params?.q) p.set("q", params.q);
@@ -383,10 +404,20 @@ export const api = {
   adminSpecies: () => request<any[]>("/api/admin/species"),
   adminPatchSpecies: (id: string, body: object) =>
     request<any>(`/api/admin/species/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  adminAudit: (params?: { action?: string; entity?: string; q?: string; page?: number; page_size?: number }) => {
+  adminAudit: (params?: {
+    action?: string;
+    entity?: string;
+    actor_id?: string;
+    project_id?: string;
+    q?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
     const p = new URLSearchParams();
     if (params?.action) p.set("action", params.action);
     if (params?.entity) p.set("entity", params.entity);
+    if (params?.actor_id) p.set("actor_id", params.actor_id);
+    if (params?.project_id) p.set("project_id", params.project_id);
     if (params?.q) p.set("q", params.q);
     if (params?.page) p.set("page", String(params.page));
     if (params?.page_size) p.set("page_size", String(params.page_size));

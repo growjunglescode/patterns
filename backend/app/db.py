@@ -43,6 +43,7 @@ def ensure_columns() -> None:
         "ALTER TABLE users ADD COLUMN study_region VARCHAR(120)",
         "ALTER TABLE users ADD COLUMN onboarding_complete BOOLEAN DEFAULT 0",
         "ALTER TABLE users ADD COLUMN home_project_id VARCHAR(36)",
+        "ALTER TABLE projects ADD COLUMN created_by_id VARCHAR(36)",
     ]
     with engine.begin() as conn:
         for sql in statements:

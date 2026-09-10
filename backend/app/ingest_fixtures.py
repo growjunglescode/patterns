@@ -118,6 +118,7 @@ def _ensure_project(db: Session, user: User) -> Project:
         slug=unique_project_slug(db, PROJECT_NAME),
         region="Costa Rica",
         active=True,
+        created_by_id=user.id,
     )
     db.add(project)
     db.flush()
