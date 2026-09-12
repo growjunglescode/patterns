@@ -17,6 +17,12 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def ensure_columns() -> None:
+    """Idempotent additive migrations for existing installs.
+
+    Each statement runs in its own transaction. On Postgres, a failed ALTER
+    aborts the whole transaction — bundling them meant later columns (like
+    projects.created_by_id) never applied after an earlier duplicate-column error.
+    """
     statements = [
         "ALTER TABLE detections ADD COLUMN camera_make VARCHAR(80)",
         "ALTER TABLE detections ADD COLUMN camera_model VARCHAR(80)",
@@ -45,12 +51,13 @@ def ensure_columns() -> None:
         "ALTER TABLE users ADD COLUMN home_project_id VARCHAR(36)",
         "ALTER TABLE projects ADD COLUMN created_by_id VARCHAR(36)",
     ]
-    with engine.begin() as conn:
-        for sql in statements:
-            try:
+    for sql in statements:
+        try:
+            with engine.begin() as conn:
                 conn.execute(text(sql))
-            except Exception:
-                pass
+        except Exception:
+            # Column already exists (or unrelated transient error) — keep going.
+            pass
 
 
 def get_db() -> Generator[Session, None, None]:
