@@ -1,12 +1,36 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://app.wildpatterns.co";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Patterns — Individual Wildlife Intelligence",
   description: "Identity without collars. Starting with jaguars.",
   icons: {
     icon: "/brand/favicon.png",
     apple: "/brand/apple-touch-icon.png",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "Patterns",
+    title: "Patterns — Individual Wildlife Intelligence",
+    description: "Identity without collars. Starting with jaguars.",
+    url: siteUrl,
+    images: [
+      {
+        url: "/brand/og-image.png",
+        width: 1024,
+        height: 1024,
+        alt: "Patterns",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Patterns — Individual Wildlife Intelligence",
+    description: "Identity without collars. Starting with jaguars.",
+    images: ["/brand/og-image.png"],
   },
 };
 
