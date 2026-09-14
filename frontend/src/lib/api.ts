@@ -26,6 +26,7 @@ export type Detection = {
   project_name: string | null;
   country?: string | null;
   region?: string | null;
+  station_id?: string | null;
   station_code: string | null;
   station_name?: string | null;
   individual_id: string | null;
@@ -140,6 +141,13 @@ export type IndividualDetailsPatch = {
   age_class?: string | null;
   birth_year_estimate?: number | null;
   physical_notes?: string | null;
+  identity_status?: string | null;
+  display_name?: string | null;
+  country?: string | null;
+  region?: string | null;
+  project_id?: string | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
 };
 
 export type NamingClaim = {

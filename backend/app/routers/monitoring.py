@@ -39,6 +39,7 @@ router = APIRouter(prefix="/api", tags=["monitoring"])
 AGE_CLASSES = {"cub", "juvenile", "subadult", "adult", "unknown"}
 SEXES = {"F", "M", "unknown"}
 LIFE_STATUSES = {"unknown", "alive", "dead", "lost"}
+IDENTITY_STATUSES = {"unnamed", "under_review", "named"}
 
 NOT_SEEN_ALERT_DAYS = 180
 NEW_INDIVIDUAL_ALERT_DAYS = 30
@@ -152,6 +153,103 @@ def patch_individual_details(
         if value != individual.physical_notes:
             changes["physical_notes"] = {"from": individual.physical_notes, "to": value}
             individual.physical_notes = value
+
+    if "identity_status" in fields:
+        value = (fields["identity_status"] or "").strip().lower() or "unnamed"
+        if value not in IDENTITY_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail="Identity status must be unnamed, under_review or named",
+            )
+        if value != individual.identity_status:
+            changes["identity_status"] = {"from": individual.identity_status, "to": value}
+            individual.identity_status = value
+
+    if "display_name" in fields:
+        raw = (fields["display_name"] or "").strip()
+        if not raw:
+            raise HTTPException(status_code=400, detail="Display name cannot be empty")
+        if raw.upper() == individual.code.upper() or raw.upper().startswith("JAG-"):
+            # Clearing back to code-only identity
+            if individual.name:
+                changes["display_name"] = {"from": individual.name, "to": None}
+                individual.name = None
+                individual.name_key = None
+        else:
+            from app.services.identity import assert_name_free, name_key
+
+            key_value = assert_name_free(db, raw, individual.id)
+            if raw != individual.name:
+                changes["display_name"] = {"from": individual.name, "to": raw}
+                individual.name = raw
+                individual.name_key = key_value
+                if individual.identity_status == "unnamed":
+                    individual.identity_status = "named"
+
+    if "project_id" in fields and fields["project_id"]:
+        project = db.get(Project, fields["project_id"])
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.id != individual.project_id:
+            changes["project_id"] = {"from": individual.project_id, "to": project.id}
+            individual.project_id = project.id
+
+    if "country" in fields or "region" in fields:
+        project = individual.project or db.get(Project, individual.project_id)
+        if project:
+            current_region = (project.region or "").strip()
+            current_country = None
+            current_area = current_region
+            if "·" in current_region:
+                current_area, current_country = [p.strip() for p in current_region.split("·", 1)]
+            elif "," in current_region:
+                current_area, current_country = [p.strip() for p in current_region.split(",", 1)]
+            next_country = current_country
+            next_area = current_area
+            if "country" in fields:
+                next_country = (fields["country"] or "").strip() or None
+            if "region" in fields:
+                # Allow full "Area · Country" or just the area part
+                raw_region = (fields["region"] or "").strip() or None
+                if raw_region and ("·" in raw_region or "," in raw_region):
+                    sep = "·" if "·" in raw_region else ","
+                    parts = [p.strip() for p in raw_region.split(sep, 1)]
+                    next_area = parts[0] or None
+                    if len(parts) > 1 and parts[1]:
+                        next_country = parts[1]
+                else:
+                    next_area = raw_region
+            if next_area and next_country and next_area != next_country:
+                composed = f"{next_area} · {next_country}"
+            else:
+                composed = next_country or next_area
+            if composed != project.region:
+                changes["project_region"] = {"from": project.region, "to": composed}
+                project.region = composed
+
+    def _parse_when(raw: str) -> datetime:
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid date/time") from exc
+
+    if "first_seen" in fields and fields["first_seen"]:
+        when = _parse_when(fields["first_seen"])
+        rows = confirmed_sightings(db, individual.id)
+        if rows:
+            earliest = min(rows, key=lambda d: d.captured_at or d.created_at)
+            before = earliest.captured_at
+            earliest.captured_at = when
+            changes["first_seen"] = {"from": before, "to": when}
+
+    if "last_seen" in fields and fields["last_seen"]:
+        when = _parse_when(fields["last_seen"])
+        rows = confirmed_sightings(db, individual.id)
+        if rows:
+            latest = max(rows, key=lambda d: d.captured_at or d.created_at)
+            before = latest.captured_at
+            latest.captured_at = when
+            changes["last_seen"] = {"from": before, "to": when}
 
     if changes:
         individual.details_updated_by_id = user.id

@@ -6,7 +6,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { CoatPrint, Grain, Wordmark } from "@/components/Brand";
 import { api, type User } from "@/lib/api";
 import { readProjectId, writeProjectId } from "@/lib/project";
-import { navFor, roleLabel, type NavItem } from "@/lib/roles";
+import { RoleViewProvider, RoleViewSwitcher, useRoleView } from "@/components/RoleView";
+import { isAdmin, navFor, roleLabel, type NavItem } from "@/lib/roles";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -100,6 +101,76 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
+  return (
+    <RoleViewProvider user={user}>
+      <AppShellChrome
+        user={user}
+        pathname={pathname}
+        menuOpen={menuOpen}
+        setMenuOpen={setMenuOpen}
+        q={q}
+        setQ={setQ}
+        search={search}
+        projectCount={projectCount}
+        projects={projects}
+        projectId={projectId}
+        setProjectId={setProjectId}
+        orgFilter={orgFilter}
+        setOrgFilter={setOrgFilter}
+      >
+        {children}
+      </AppShellChrome>
+    </RoleViewProvider>
+  );
+}
+
+function AppShellChrome({
+  user,
+  children,
+  pathname,
+  menuOpen,
+  setMenuOpen,
+  q,
+  setQ,
+  search,
+  projectCount,
+  projects,
+  projectId,
+  setProjectId,
+  orgFilter,
+  setOrgFilter,
+}: {
+  user: User | null;
+  children: React.ReactNode;
+  pathname: string;
+  menuOpen: boolean;
+  setMenuOpen: (open: boolean) => void;
+  q: string;
+  setQ: (value: string) => void;
+  search: (e: FormEvent) => void;
+  projectCount: number;
+  projects: {
+    id: string;
+    name: string;
+    organization_name?: string | null;
+    organization_id?: string | null;
+    active?: boolean;
+  }[];
+  projectId: string;
+  setProjectId: (id: string) => void;
+  orgFilter: string;
+  setOrgFilter: (id: string) => void;
+}) {
+  const router = useRouter();
+  const { effectiveRole, isActualAdmin } = useRoleView();
+
+  useEffect(() => {
+    if (!isActualAdmin) return;
+    if (pathname.startsWith("/admin") && !isAdmin(effectiveRole)) {
+      router.replace("/overview");
+    }
+  }, [effectiveRole, isActualAdmin, pathname, router]);
+
   const initials = (user?.display_name || "AR")
     .split(" ")
     .map((p) => p[0])
@@ -107,7 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     .slice(0, 2)
     .toUpperCase();
 
-  const nav = navFor(user?.role, { projectCount });
+  const nav = navFor(effectiveRole, { projectCount });
 
   const orgs = Array.from(
     new Map(
@@ -201,7 +272,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             <div className="min-w-0">
               <p className="truncate text-[13px] font-semibold leading-tight">{user?.display_name || "Guest"}</p>
-              <p className="text-[11px] text-white/45">{roleLabel(user?.role)}</p>
+              <p className="text-[11px] text-white/45">{roleLabel(effectiveRole)}</p>
             </div>
           </Link>
         </div>
@@ -273,9 +344,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="hidden sm:inline">Upload</span>
               </Link>
             )}
-            <span className="hidden rounded-md border border-[#2a3832] bg-[#18211d] px-3 py-1 text-[11px] font-semibold text-[#e6ede8] sm:inline">
-              {roleLabel(user?.role)}
-            </span>
+            <RoleViewSwitcher />
+            {!isActualAdmin && (
+              <span className="hidden rounded-md border border-[#2a3832] bg-[#18211d] px-3 py-1 text-[11px] font-semibold text-[#e6ede8] sm:inline">
+                {roleLabel(effectiveRole)}
+              </span>
+            )}
           </div>
         </header>
         <main className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain bg-[#070a09] px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-6 lg:px-7 lg:py-7">

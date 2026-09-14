@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.admin_policy import is_super_admin_email
 from app.auth import get_current_user, require_roles
 from app.roles import canonical_role
 from app.db import get_db
@@ -393,10 +394,17 @@ def patch_user(
     if payload.role:
         if payload.role not in {"admin", "scientist", "citizen", "viewer"}:
             raise HTTPException(status_code=400, detail="Unknown role")
+        if payload.role == "admin" and not is_super_admin_email(target.email):
+            raise HTTPException(
+                status_code=400,
+                detail="Only the designated owner account can be admin",
+            )
+        if is_super_admin_email(target.email) and payload.role != "admin":
+            raise HTTPException(status_code=400, detail="Cannot demote the owner admin account")
         if canonical_role(target.role) == "admin" and payload.role != "admin":
-            admin_count = db.scalar(select(func.count()).select_from(User).where(User.role == "admin")) or 0
-            if admin_count <= 1:
-                raise HTTPException(status_code=400, detail="Keep at least one admin")
+            if is_super_admin_email(target.email):
+                raise HTTPException(status_code=400, detail="Cannot demote the owner admin account")
+            # Non-owner admins should not exist; allow demotion.
         target.role = payload.role
         if payload.role == "scientist":
             target.verified = True if payload.verified is None else payload.verified

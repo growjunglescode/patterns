@@ -2,24 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { api, type User } from "@/lib/api";
+import { useRoleView } from "@/components/RoleView";
 import { isAdmin, isScientist } from "@/lib/roles";
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
-  useEffect(() => {
-    api.me().then(setUser).catch(() => undefined);
-  }, []);
+  const { effectiveRole } = useRoleView();
 
   const links = [
     { href: "/settings", label: "Profile", match: (p: string) => p === "/settings" },
     { href: "/settings/sharing", label: "Sharing", match: (p: string) => p.startsWith("/settings/sharing") },
-    ...(isScientist(user?.role)
+    ...(isScientist(effectiveRole)
       ? [{ href: "/portfolio", label: "Projects", match: (p: string) => p.startsWith("/portfolio") }]
       : []),
-    ...(isAdmin(user?.role)
+    ...(isAdmin(effectiveRole)
       ? [
           { href: "/admin", label: "Control room", match: (p: string) => p.startsWith("/admin") },
           { href: "/settings/permissions", label: "Permissions", match: (p: string) => p.startsWith("/settings/permissions") },

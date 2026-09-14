@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CoatPrint, Grain, Wordmark } from "@/components/Brand";
-import { InstitutionAutocomplete } from "@/components/InstitutionAutocomplete";
+import { CountryCityFields, CountrySelect } from "@/components/CountryCityFields";
 import { api, type User } from "@/lib/api";
 import { writeProjectId } from "@/lib/project";
 
@@ -189,22 +189,18 @@ export default function OnboardingPage() {
                       : affiliation === "institution"
                         ? "Institute name"
                         : "Organization name"}
-                    <InstitutionAutocomplete
+                    <input
+                      className="mt-1 w-full"
                       value={organization}
                       required
-                      affiliation={affiliation}
+                      onChange={(e) => setOrganization(e.target.value)}
                       placeholder={
                         affiliation === "university"
-                          ? "Start typing a university…"
+                          ? "e.g. Universidad de Costa Rica"
                           : affiliation === "institution"
-                            ? "Start typing an institute or NGO…"
-                            : "Start typing an organization…"
+                            ? "e.g. Osa Conservation"
+                            : "e.g. Grow Jungles"
                       }
-                      onChange={setOrganization}
-                      onSelect={(row) => {
-                        if (row.country && !country.trim()) setCountry(row.country);
-                        if (row.city && !city.trim()) setCity(row.city);
-                      }}
                     />
                   </label>
                   <label className="block text-[13px] text-[#8a9a92]">
@@ -236,27 +232,16 @@ export default function OnboardingPage() {
                   placeholder="+506 …"
                 />
               </label>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="block text-[13px] text-[#8a9a92]">
-                  Country where you are based
-                  <input
-                    className="mt-1 w-full"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="Costa Rica"
-                    required
-                  />
-                </label>
-                <label className="block text-[13px] text-[#8a9a92]">
-                  City / town
-                  <input
-                    className="mt-1 w-full"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Puerto Jiménez"
-                  />
-                </label>
-              </div>
+              <CountryCityFields
+                tone="dark"
+                required
+                country={country}
+                city={city}
+                onCountry={setCountry}
+                onCity={setCity}
+                countryLabel="Country where you are based"
+                cityLabel="City / town"
+              />
               <label className="block text-[13px] text-[#8a9a92]">
                 Anything else we should know (optional)
                 <textarea
@@ -274,23 +259,20 @@ export default function OnboardingPage() {
             <div className="space-y-4">
               {needsTraps ? (
                 <>
-                  <label className="block text-[13px] text-[#8a9a92]">
-                    Country of your camera traps
-                    <input
-                      className="mt-1 w-full"
-                      value={studyCountry}
-                      onChange={(e) => setStudyCountry(e.target.value)}
-                      placeholder="Costa Rica"
-                      required
-                    />
-                  </label>
+                  <CountrySelect
+                    tone="dark"
+                    required
+                    value={studyCountry}
+                    onChange={setStudyCountry}
+                    label="Country of your camera traps"
+                  />
                   <label className="block text-[13px] text-[#8a9a92]">
                     Region / park / study area
                     <input
                       className="mt-1 w-full"
                       value={studyRegion}
                       onChange={(e) => setStudyRegion(e.target.value)}
-                      placeholder="e.g. Amazon Basin"
+                      placeholder="e.g. Osa Peninsula"
                     />
                   </label>
                 </>
@@ -302,14 +284,12 @@ export default function OnboardingPage() {
               )}
               {!needsTraps && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block text-[13px] text-[#8a9a92]">
-                    Camera trap country (optional)
-                    <input
-                      className="mt-1 w-full"
-                      value={studyCountry}
-                      onChange={(e) => setStudyCountry(e.target.value)}
-                    />
-                  </label>
+                  <CountrySelect
+                    tone="dark"
+                    value={studyCountry}
+                    onChange={setStudyCountry}
+                    label="Camera trap country (optional)"
+                  />
                   <label className="block text-[13px] text-[#8a9a92]">
                     Area (optional)
                     <input

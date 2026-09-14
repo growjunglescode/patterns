@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 import secrets
 
+from app.admin_policy import enforce_admin_exclusivity
 from app.auth import create_access_token, get_current_user, hash_password, verify_password
 from app.config import get_settings
 from app.db import get_db
@@ -64,6 +65,9 @@ def login(
         or not verify_password(form.password, user.hashed_password)
     ):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+    if enforce_admin_exclusivity(user):
+        db.commit()
+        db.refresh(user)
     return Token(access_token=create_access_token(user))
 
 
@@ -106,13 +110,23 @@ def google_login(payload: GoogleAuthRequest, db: Session = Depends(get_db)) -> T
         )
         db.add(user)
 
+    if enforce_admin_exclusivity(user):
+        pass
     db.commit()
     db.refresh(user)
     return Token(access_token=create_access_token(user))
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(get_current_user)) -> UserOut:
+def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> UserOut:
+    from app.admin_policy import scrub_admin_roles
+
+    if scrub_admin_roles(db):
+        db.commit()
+        db.refresh(user)
+    elif enforce_admin_exclusivity(user):
+        db.commit()
+        db.refresh(user)
     return user_out(user)
 
 

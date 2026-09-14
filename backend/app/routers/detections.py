@@ -508,6 +508,13 @@ def patch_metadata(
     detection = _load(db, detection_id)
     if not detection:
         raise HTTPException(status_code=404, detail="Detection not found")
+    if detection.uploader_id != user.id and canonical_role(user.role) not in {"admin", "scientist"}:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+    fields = payload.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="No metadata changes provided")
+
     if payload.station_id:
         station = db.get(CameraStation, payload.station_id)
         if not station:
@@ -526,17 +533,6 @@ def patch_metadata(
         detection.metadata_source = f"{detection.metadata_source or ''},manual_gps".strip(",")
     elif payload.latitude is not None or payload.longitude is not None:
         raise HTTPException(status_code=400, detail="Provide both latitude and longitude")
-    if (
-        detection.latitude is None
-        and detection.longitude is None
-        and not payload.station_id
-        and payload.captured_at is None
-        and payload.notes is None
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Choose a camera station or enter latitude and longitude",
-        )
     if payload.captured_at:
         try:
             detection.captured_at = datetime.fromisoformat(payload.captured_at.replace("Z", "+00:00"))
@@ -545,6 +541,30 @@ def patch_metadata(
             raise HTTPException(status_code=400, detail="Invalid captured_at") from exc
     if payload.notes is not None:
         detection.notes = payload.notes
+    if payload.side is not None:
+        side = payload.side.strip().upper() or "U"
+        if side not in {"L", "R", "B", "U"}:
+            raise HTTPException(status_code=400, detail="Flank must be L, R, B or U")
+        detection.side = side
+        detection.metadata_source = f"{detection.metadata_source or ''},manual_side".strip(",")
+    if "camera_make" in fields:
+        detection.camera_make = (payload.camera_make or "").strip() or None
+        detection.metadata_source = f"{detection.metadata_source or ''},manual_camera".strip(",")
+    if "camera_model" in fields:
+        detection.camera_model = (payload.camera_model or "").strip() or None
+        detection.metadata_source = f"{detection.metadata_source or ''},manual_camera".strip(",")
+    if "country" in fields:
+        project = detection.project or db.get(Project, detection.project_id)
+        if project:
+            current = (project.region or "").strip()
+            area = current
+            if "·" in current:
+                area = current.split("·", 1)[0].strip()
+            elif "," in current:
+                area = current.split(",", 1)[0].strip()
+            country = (payload.country or "").strip()
+            project.region = f"{area} · {country}".strip(" ·") if country else area or None
+
     detection.grade = grade_detection(db, detection)
     db.commit()
     loaded = _load(db, detection_id)

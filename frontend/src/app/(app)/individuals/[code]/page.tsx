@@ -1,16 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { SightingsMap } from "@/components/SightingsMap";
 import { GradeBadge, ReviewStateBadge } from "@/components/GradeBadge";
-import { api, mediaSrc, type Detection, type Individual, type Movement, type User } from "@/lib/api";
+import { api, mediaSrc, type Detection, type Individual, type Movement, type Station, type User } from "@/lib/api";
 import { isAdmin, isScientist } from "@/lib/roles";
 import { useProjectId } from "@/lib/useProjectId";
 
 const AGE_CLASSES = ["unknown", "cub", "juvenile", "subadult", "adult"];
 const LIFE_STATUSES = ["unknown", "alive", "dead", "lost"];
+const IDENTITY_STATUSES = ["unnamed", "under_review", "named"];
+const FLANKS = [
+  { value: "L", label: "Left" },
+  { value: "R", label: "Right" },
+  { value: "B", label: "Both" },
+  { value: "U", label: "Unknown" },
+];
 
 function fmtDate(value?: string | null) {
   if (!value) return "—";
@@ -42,6 +49,29 @@ function flankLabel(side?: string | null) {
   return { L: "Left", R: "Right", B: "Both", U: "Unknown" }[side || "U"] || side || "Unknown";
 }
 
+function toLocalInput(value?: string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function splitRegion(region?: string | null, country?: string | null) {
+  const raw = (region || "").trim();
+  if (!raw) return { area: "", country: country || "" };
+  if (raw.includes("·")) {
+    const [area, c] = raw.split("·").map((part) => part.trim());
+    return { area: area || "", country: c || country || "" };
+  }
+  if (raw.includes(",")) {
+    const [area, c] = raw.split(",").map((part) => part.trim());
+    return { area: area || "", country: c || country || "" };
+  }
+  if (country && raw === country) return { area: "", country };
+  return { area: raw, country: country || "" };
+}
+
 export default function IndividualProfilePage() {
   const { code } = useParams<{ code: string }>();
   const [ind, setInd] = useState<Individual | null>(null);
@@ -49,12 +79,13 @@ export default function IndividualProfilePage() {
   const [movement, setMovement] = useState<Movement | null>(null);
   const [me, setMe] = useState<User | null>(null);
   const [copied, setCopied] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detection | null>(null);
   const [mergeCode, setMergeCode] = useState("");
   const [mergeBusy, setMergeBusy] = useState(false);
   const [mergeError, setMergeError] = useState("");
+  const [stations, setStations] = useState<Station[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const projectId = useProjectId();
 
   useEffect(() => {
@@ -66,8 +97,18 @@ export default function IndividualProfilePage() {
       const first = rows.find((d) => d.media.some((m) => m.kind !== "video")) || rows[0];
       if (first) setSelectedId(first.id);
       api.movement(row.code).then(setMovement).catch(() => undefined);
+      api.stations(row.project_id).then(setStations).catch(() => setStations([]));
     });
   }, [code]);
+
+  useEffect(() => {
+    if (!me) return;
+    if (!isScientist(me.role)) return;
+    api
+      .portfolio()
+      .then((p) => setProjects((p?.projects || []).map((row: { id: string; name: string }) => ({ id: row.id, name: row.name }))))
+      .catch(() => setProjects([]));
+  }, [me]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -99,6 +140,9 @@ export default function IndividualProfilePage() {
     });
 
   const canEdit = isScientist(me?.role);
+  const canEditSighting =
+    Boolean(selected) &&
+    (isScientist(me?.role) || Boolean(me && selected && selected.uploader_id === me.id));
   const stale = ind.days_since_seen != null && ind.days_since_seen > 180;
   const provenance = detail || selected;
   const candidates = detail?.candidates || [];
@@ -108,39 +152,56 @@ export default function IndividualProfilePage() {
       <div className="xl:grid xl:grid-cols-[16rem_minmax(0,1fr)_18rem] xl:gap-5">
         <aside className="surface mb-5 space-y-4 p-5 xl:mb-0">
           <p className="page-kicker">Identity (catalog record)</p>
-          <h1 className="page-title mt-1 text-[1.55rem]">{ind.display_name}</h1>
-          <p className="font-mono text-[12px] text-ink/50">{ind.code}</p>
-          <p className="text-[13px] text-ink/60">
-            {ind.common_name || ind.species}
-            {ind.scientific_name ? (
-              <>
-                {" "}
-                · <em>{ind.scientific_name}</em>
-              </>
-            ) : null}
-          </p>
-          <dl className="space-y-3 text-[13px]">
-            {[
-              ["Status", ind.identity_status],
-              ["Country", ind.country || "—"],
-              ["Region", ind.region && ind.region !== ind.country ? ind.region : "—"],
-              ["Project", ind.project_name || "—"],
-              ["Sex", ind.sex || "unknown"],
-              ["Life", ind.life_status],
-              ["Age", ind.age_class || "unknown"],
-              ["Sightings", String(ind.sighting_count ?? mine.length)],
-              ["First seen", fmtDate(ind.first_seen)],
-              ["Last seen", fmtDate(ind.last_seen)],
-              ["Days silent", ind.days_since_seen == null ? "—" : String(ind.days_since_seen)],
-            ].map(([label, value]) => (
-              <div key={label} className="flex justify-between gap-3 border-b border-ink/[0.06] pb-2">
-                <dt className="text-ink/45">{label}</dt>
-                <dd className={label === "Status" || label === "Sex" || label === "Life" || label === "Age" ? "capitalize" : ""}>
-                  {value}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {canEdit ? (
+            <CatalogEditor
+              individual={ind}
+              projects={projects}
+              sightingCount={ind.sighting_count ?? mine.length}
+              onSaved={async (updated) => {
+                setInd(updated);
+                setObs(await api.detections(undefined, updated.id));
+                if (updated.project_id !== ind.project_id) {
+                  api.stations(updated.project_id).then(setStations).catch(() => setStations([]));
+                }
+              }}
+            />
+          ) : (
+            <>
+              <h1 className="page-title mt-1 text-[1.55rem]">{ind.display_name}</h1>
+              <p className="font-mono text-[12px] text-ink/50">{ind.code}</p>
+              <p className="text-[13px] text-ink/60">
+                {ind.common_name || ind.species}
+                {ind.scientific_name ? (
+                  <>
+                    {" "}
+                    · <em>{ind.scientific_name}</em>
+                  </>
+                ) : null}
+              </p>
+              <dl className="space-y-3 text-[13px]">
+                {[
+                  ["Status", ind.identity_status],
+                  ["Country", ind.country || "—"],
+                  ["Region", ind.region && ind.region !== ind.country ? ind.region : "—"],
+                  ["Project", ind.project_name || "—"],
+                  ["Sex", ind.sex || "unknown"],
+                  ["Life", ind.life_status],
+                  ["Age", ind.age_class || "unknown"],
+                  ["Sightings", String(ind.sighting_count ?? mine.length)],
+                  ["First seen", fmtDate(ind.first_seen)],
+                  ["Last seen", fmtDate(ind.last_seen)],
+                  ["Days silent", ind.days_since_seen == null ? "—" : String(ind.days_since_seen)],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-3 border-b border-ink/[0.06] pb-2">
+                    <dt className="text-ink/45">{label}</dt>
+                    <dd className={label === "Status" || label === "Sex" || label === "Life" || label === "Age" ? "capitalize" : ""}>
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          )}
           {stale && (
             <p className="text-[12.5px] text-[var(--signal-warn)]">Not seen in {ind.days_since_seen} days.</p>
           )}
@@ -199,22 +260,37 @@ export default function IndividualProfilePage() {
           {selected && (
             <div className="surface p-4">
               <p className="section-title mb-3">Selected sighting</p>
-              <dl className="grid gap-3 text-[13px] sm:grid-cols-2">
-                {[
-                  ["Taken", fmtDateTime(selected.captured_at || selected.created_at)],
-                  ["Location", selected.station_name || selected.station_code || "—"],
-                  ["Country", selected.country || ind.country || "—"],
-                  ["Coordinates", fmtCoords(selected.latitude, selected.longitude)],
-                  ["Flank", flankLabel(selected.side)],
-                  ["Camera", [selected.camera_make, selected.camera_model].filter(Boolean).join(" ") || "—"],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">{label}</dt>
-                    <dd className="mt-0.5">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              {(selected.notes || selected.summary) && (
+              {canEditSighting ? (
+                <SightingEditor
+                  key={selected.id}
+                  detection={detail || selected}
+                  stations={stations}
+                  fallbackCountry={ind.country || ""}
+                  onSaved={async (updated) => {
+                    setDetail(updated);
+                    setObs((rows) => rows.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)));
+                    const refreshed = await api.individual(ind.code);
+                    setInd(refreshed);
+                  }}
+                />
+              ) : (
+                <dl className="grid gap-3 text-[13px] sm:grid-cols-2">
+                  {[
+                    ["Taken", fmtDateTime(selected.captured_at || selected.created_at)],
+                    ["Location", selected.station_name || selected.station_code || "—"],
+                    ["Country", selected.country || ind.country || "—"],
+                    ["Coordinates", fmtCoords(selected.latitude, selected.longitude)],
+                    ["Flank", flankLabel(selected.side)],
+                    ["Camera", [selected.camera_make, selected.camera_model].filter(Boolean).join(" ") || "—"],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">{label}</dt>
+                      <dd className="mt-0.5">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+              {(selected.notes || selected.summary) && !canEditSighting && (
                 <div className="mt-4 border-t border-[var(--line)] pt-3">
                   <p className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Scientific notes</p>
                   <p className="mt-1 whitespace-pre-line text-[13.5px]">{selected.notes || selected.summary}</p>
@@ -401,140 +477,305 @@ export default function IndividualProfilePage() {
           </div>
         </aside>
       </div>
-
-      <section>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="section-title">Scientific notes</h2>
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => setEditing((v) => !v)}
-              className="rounded-md border border-ink/15 bg-paper px-4 py-1.5 text-[13px]"
-            >
-              {editing ? "Cancel" : "Edit details"}
-            </button>
-          )}
-        </div>
-        {editing && canEdit ? (
-          <DetailsForm
-            individual={ind}
-            onSaved={(updated) => {
-              setInd(updated);
-              setEditing(false);
-            }}
-          />
-        ) : (
-          <div className="surface p-6">
-            <p className="whitespace-pre-line text-[13.5px]">
-              {ind.physical_notes || "No scientific notes recorded for this jaguar yet."}
-            </p>
-            <p className="mt-4 text-[12.5px] text-ink/45">
-              {ind.details_updated_by
-                ? `Last updated by ${ind.details_updated_by} on ${fmtDate(ind.details_updated_at)}.`
-                : "Identity notes, scars, morph, and field remarks belong here."}
-            </p>
-          </div>
-        )}
-      </section>
     </div>
   );
 }
 
-function DetailsForm({
+function CatalogEditor({
   individual,
+  projects,
+  sightingCount,
   onSaved,
 }: {
   individual: Individual;
-  onSaved: (updated: Individual) => void;
+  projects: { id: string; name: string }[];
+  sightingCount: number;
+  onSaved: (updated: Individual) => void | Promise<void>;
 }) {
+  const split = useMemo(
+    () => splitRegion(individual.region, individual.country),
+    [individual.region, individual.country],
+  );
+  const [displayName, setDisplayName] = useState(individual.display_name);
+  const [status, setStatus] = useState(individual.identity_status || "unnamed");
+  const [country, setCountry] = useState(split.country);
+  const [region, setRegion] = useState(split.area);
+  const [projectId, setProjectId] = useState(individual.project_id);
   const [sex, setSex] = useState(individual.sex || "unknown");
   const [lifeStatus, setLifeStatus] = useState(individual.life_status || "unknown");
   const [ageClass, setAgeClass] = useState(individual.age_class || "unknown");
-  const [birthYear, setBirthYear] = useState(
-    individual.birth_year_estimate ? String(individual.birth_year_estimate) : "",
-  );
+  const [firstSeen, setFirstSeen] = useState(toLocalInput(individual.first_seen));
+  const [lastSeen, setLastSeen] = useState(toLocalInput(individual.last_seen));
   const [notes, setNotes] = useState(individual.physical_notes || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
 
-  async function save() {
+  useEffect(() => {
+    const next = splitRegion(individual.region, individual.country);
+    setDisplayName(individual.display_name);
+    setStatus(individual.identity_status || "unnamed");
+    setCountry(next.country);
+    setRegion(next.area);
+    setProjectId(individual.project_id);
+    setSex(individual.sex || "unknown");
+    setLifeStatus(individual.life_status || "unknown");
+    setAgeClass(individual.age_class || "unknown");
+    setFirstSeen(toLocalInput(individual.first_seen));
+    setLastSeen(toLocalInput(individual.last_seen));
+    setNotes(individual.physical_notes || "");
+  }, [individual]);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
     setSaving(true);
     setError("");
+    setSaved("");
     try {
       const updated = await api.patchIndividualDetails(individual.code, {
+        display_name: displayName,
+        identity_status: status,
+        country: country || null,
+        region: region || null,
+        project_id: projectId,
         sex,
         life_status: lifeStatus,
         age_class: ageClass,
-        birth_year_estimate: birthYear.trim() ? Number(birthYear) : null,
         physical_notes: notes,
+        first_seen: firstSeen ? new Date(firstSeen).toISOString() : null,
+        last_seen: lastSeen ? new Date(lastSeen).toISOString() : null,
       });
-      onSaved(updated);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save these details");
+      await onSaved(updated);
+      setSaved("Saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="surface p-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="block text-[13px]">
-          <span className="kpi-label !mt-0 block">Sex</span>
-          <select className="mt-1.5" value={sex} onChange={(e) => setSex(e.target.value)}>
-            <option value="unknown">Unknown</option>
-            <option value="F">Female</option>
-            <option value="M">Male</option>
-          </select>
-        </label>
-        <label className="block text-[13px]">
-          <span className="kpi-label !mt-0 block">Life status</span>
-          <select className="mt-1.5" value={lifeStatus} onChange={(e) => setLifeStatus(e.target.value)}>
-            {LIFE_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {value[0].toUpperCase() + value.slice(1)}
+    <form onSubmit={onSubmit} className="space-y-3 text-[13px]">
+      <label className="block">
+        <span className="text-ink/45">Name</span>
+        <input className="mt-1 w-full" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+      </label>
+      <p className="font-mono text-[12px] text-ink/50">{individual.code}</p>
+      <p className="text-[13px] text-ink/60">
+        {individual.common_name || individual.species}
+        {individual.scientific_name ? (
+          <>
+            {" "}
+            · <em>{individual.scientific_name}</em>
+          </>
+        ) : null}
+      </p>
+      <label className="block">
+        <span className="text-ink/45">Status</span>
+        <select className="mt-1 w-full capitalize" value={status} onChange={(e) => setStatus(e.target.value)}>
+          {IDENTITY_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {value.replaceAll("_", " ")}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-ink/45">Country</span>
+        <input className="mt-1 w-full" value={country} onChange={(e) => setCountry(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="text-ink/45">Region</span>
+        <input className="mt-1 w-full" value={region} onChange={(e) => setRegion(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="text-ink/45">Project</span>
+        <select className="mt-1 w-full" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+          {[...projects, { id: individual.project_id, name: individual.project_name || "Current project" }]
+            .filter((row, index, all) => all.findIndex((item) => item.id === row.id) === index)
+            .map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="block text-[13px]">
-          <span className="kpi-label !mt-0 block">Age class</span>
-          <select className="mt-1.5" value={ageClass} onChange={(e) => setAgeClass(e.target.value)}>
-            {AGE_CLASSES.map((value) => (
-              <option key={value} value={value}>
-                {value[0].toUpperCase() + value.slice(1)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-[13px]">
-          <span className="kpi-label !mt-0 block">Estimated birth year</span>
-          <input
-            className="mt-1.5"
-            inputMode="numeric"
-            placeholder="e.g. 2019"
-            value={birthYear}
-            onChange={(e) => setBirthYear(e.target.value.replace(/[^0-9]/g, ""))}
-          />
-        </label>
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-ink/45">Sex</span>
+        <select className="mt-1 w-full" value={sex} onChange={(e) => setSex(e.target.value)}>
+          <option value="unknown">Unknown</option>
+          <option value="F">Female</option>
+          <option value="M">Male</option>
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-ink/45">Life</span>
+        <select className="mt-1 w-full capitalize" value={lifeStatus} onChange={(e) => setLifeStatus(e.target.value)}>
+          {LIFE_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-ink/45">Age</span>
+        <select className="mt-1 w-full capitalize" value={ageClass} onChange={(e) => setAgeClass(e.target.value)}>
+          {AGE_CLASSES.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="flex justify-between gap-3 border-b border-ink/[0.06] pb-2">
+        <span className="text-ink/45">Sightings</span>
+        <span>{sightingCount}</span>
       </div>
-      <label className="mt-4 block text-[13px]">
-        <span className="kpi-label !mt-0 block">Scientific notes</span>
-        <textarea
-          className="mt-1.5"
-          rows={3}
-          placeholder="Scars, ear notches, morph, behavior…"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+      <label className="block">
+        <span className="text-ink/45">First seen</span>
+        <input
+          type="datetime-local"
+          className="mt-1 w-full"
+          value={firstSeen}
+          onChange={(e) => setFirstSeen(e.target.value)}
         />
       </label>
-      {error && <p className="mt-3 text-[13px] text-[#e8a39c]">{error}</p>}
-      <div className="mt-4 flex items-center gap-3">
-        <button type="button" onClick={save} disabled={saving} className="btn-gold !px-5 !py-2">
-          {saving ? "Saving…" : "Save details"}
-        </button>
-        <p className="text-[12.5px] text-ink/45">Every change is written to the audit log.</p>
+      <label className="block">
+        <span className="text-ink/45">Last seen</span>
+        <input
+          type="datetime-local"
+          className="mt-1 w-full"
+          value={lastSeen}
+          onChange={(e) => setLastSeen(e.target.value)}
+        />
+      </label>
+      <div className="flex justify-between gap-3 border-b border-ink/[0.06] pb-2">
+        <span className="text-ink/45">Days silent</span>
+        <span>{individual.days_since_seen == null ? "—" : individual.days_since_seen}</span>
       </div>
-    </div>
+      <label className="block">
+        <span className="text-ink/45">Scientific notes</span>
+        <textarea className="mt-1 w-full" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </label>
+      {error && <p className="text-[12.5px] text-[#e8a39c]">{error}</p>}
+      {saved && <p className="text-[12.5px] text-teal">{saved}</p>}
+      <button type="submit" className="btn-forest w-full !py-2 text-[13px]" disabled={saving}>
+        {saving ? "Saving…" : "Save identity"}
+      </button>
+    </form>
+  );
+}
+
+function SightingEditor({
+  detection,
+  stations,
+  fallbackCountry,
+  onSaved,
+}: {
+  detection: Detection;
+  stations: Station[];
+  fallbackCountry: string;
+  onSaved: (updated: Detection) => void | Promise<void>;
+}) {
+  const [taken, setTaken] = useState(toLocalInput(detection.captured_at || detection.created_at));
+  const [stationId, setStationId] = useState(detection.station_id || "");
+  const [country, setCountry] = useState(detection.country || fallbackCountry || "");
+  const [lat, setLat] = useState(detection.latitude != null ? String(detection.latitude) : "");
+  const [lng, setLng] = useState(detection.longitude != null ? String(detection.longitude) : "");
+  const [side, setSide] = useState(detection.side || "U");
+  const [cameraMake, setCameraMake] = useState(detection.camera_make || "");
+  const [cameraModel, setCameraModel] = useState(detection.camera_model || "");
+  const [notes, setNotes] = useState(detection.notes || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState("");
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    setSaved("");
+    try {
+      const body: Record<string, unknown> = {
+        side,
+        camera_make: cameraMake || null,
+        camera_model: cameraModel || null,
+        notes,
+        country: country || null,
+      };
+      if (taken) body.captured_at = new Date(taken).toISOString();
+      if (stationId) body.station_id = stationId;
+      if (lat.trim() && lng.trim()) {
+        body.latitude = Number(lat);
+        body.longitude = Number(lng);
+      }
+      const updated = await api.patchMetadata(detection.id, body);
+      await onSaved(updated);
+      setSaved("Saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save sighting");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="grid gap-3 text-[13px] sm:grid-cols-2">
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Taken</span>
+        <input type="datetime-local" className="mt-1 w-full" value={taken} onChange={(e) => setTaken(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Location</span>
+        <select className="mt-1 w-full" value={stationId} onChange={(e) => setStationId(e.target.value)}>
+          <option value="">No station</option>
+          {stations.map((station) => (
+            <option key={station.id} value={station.id}>
+              {station.name} ({station.code})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Country</span>
+        <input className="mt-1 w-full" value={country} onChange={(e) => setCountry(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Flank</span>
+        <select className="mt-1 w-full" value={side} onChange={(e) => setSide(e.target.value)}>
+          {FLANKS.map((row) => (
+            <option key={row.value} value={row.value}>
+              {row.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Latitude</span>
+        <input className="mt-1 w-full" value={lat} onChange={(e) => setLat(e.target.value)} placeholder="0.00000" />
+      </label>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Longitude</span>
+        <input className="mt-1 w-full" value={lng} onChange={(e) => setLng(e.target.value)} placeholder="0.00000" />
+      </label>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Camera make</span>
+        <input className="mt-1 w-full" value={cameraMake} onChange={(e) => setCameraMake(e.target.value)} />
+      </label>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Camera model</span>
+        <input className="mt-1 w-full" value={cameraModel} onChange={(e) => setCameraModel(e.target.value)} />
+      </label>
+      <label className="block sm:col-span-2">
+        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Notes</span>
+        <textarea className="mt-1 w-full" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </label>
+      {error && <p className="sm:col-span-2 text-[12.5px] text-[#e8a39c]">{error}</p>}
+      {saved && <p className="sm:col-span-2 text-[12.5px] text-teal">{saved}</p>}
+      <button type="submit" className="btn-forest sm:col-span-2 !py-2 text-[13px]" disabled={saving}>
+        {saving ? "Saving…" : "Save sighting"}
+      </button>
+    </form>
   );
 }

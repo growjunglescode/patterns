@@ -57,6 +57,10 @@ def startup() -> None:
     try:
         seed_if_empty(db)
         ensure_reference_data(db)
+        from app.admin_policy import scrub_admin_roles
+
+        if scrub_admin_roles(db):
+            db.commit()
     finally:
         db.close()
 

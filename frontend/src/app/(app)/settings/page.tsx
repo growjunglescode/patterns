@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type User } from "@/lib/api";
-import { InstitutionAutocomplete } from "@/components/InstitutionAutocomplete";
+import { CountryCityFields, CountrySelect } from "@/components/CountryCityFields";
 import { roleLabel } from "@/lib/roles";
 
 type Affiliation = "university" | "institution" | "organization" | "hobby" | "";
@@ -17,17 +17,17 @@ const AFFILIATION_OPTIONS: { value: Exclude<Affiliation, "">; label: string }[] 
 
 function orgFieldCopy(affiliation: Affiliation) {
   if (affiliation === "university") {
-    return { label: "University name", placeholder: "Start typing a university…" };
+    return { label: "University name", placeholder: "e.g. Universidad de Costa Rica" };
   }
   if (affiliation === "institution") {
-    return { label: "Institute name", placeholder: "Start typing an institute or NGO…" };
+    return { label: "Institute name", placeholder: "e.g. Osa Conservation" };
   }
   if (affiliation === "organization") {
-    return { label: "Organization name", placeholder: "Start typing an organization…" };
+    return { label: "Organization name", placeholder: "e.g. Grow Jungles" };
   }
   return {
     label: "University, institute, or organization",
-    placeholder: "Start typing a university, institute, or organization…",
+    placeholder: "Type the full name",
   };
 }
 
@@ -166,35 +166,32 @@ export default function ProfileSettingsPage() {
         {showOrgName && (
           <label className="block text-[13px]">
             {orgCopy.label}
-            <InstitutionAutocomplete
+            <input
+              className="mt-1 w-full"
               value={organization}
-              affiliation={affiliation || undefined}
-              onChange={setOrganization}
-              onSelect={(row) => {
-                if (row.country && !country.trim()) setCountry(row.country);
-                if (row.city && !city.trim()) setCity(row.city);
-              }}
+              onChange={(e) => setOrganization(e.target.value)}
               placeholder={orgCopy.placeholder}
             />
           </label>
         )}
+        <CountryCityFields
+          country={country}
+          city={city}
+          onCountry={setCountry}
+          onCity={setCity}
+          countryLabel="Country"
+          cityLabel="City"
+        />
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-[13px]">
             Phone
             <input className="mt-1" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </label>
-          <label className="block text-[13px]">
-            Country
-            <input className="mt-1" value={country} onChange={(e) => setCountry(e.target.value)} />
-          </label>
-          <label className="block text-[13px]">
-            City
-            <input className="mt-1" value={city} onChange={(e) => setCity(e.target.value)} />
-          </label>
-          <label className="block text-[13px]">
-            Camera trap country
-            <input className="mt-1" value={studyCountry} onChange={(e) => setStudyCountry(e.target.value)} />
-          </label>
+          <CountrySelect
+            value={studyCountry}
+            onChange={setStudyCountry}
+            label="Camera trap country"
+          />
         </div>
         <label className="block text-[13px]">
           Study area / region

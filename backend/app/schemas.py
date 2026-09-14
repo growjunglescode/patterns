@@ -154,6 +154,13 @@ class IndividualDetailsPatch(BaseModel):
     age_class: str | None = None
     birth_year_estimate: int | None = None
     physical_notes: str | None = Field(default=None, max_length=2000)
+    identity_status: str | None = None
+    display_name: str | None = Field(default=None, max_length=80)
+    country: str | None = Field(default=None, max_length=80)
+    region: str | None = Field(default=None, max_length=120)
+    project_id: str | None = None
+    first_seen: str | None = None
+    last_seen: str | None = None
 
 
 class IndividualOut(BaseModel):
@@ -213,6 +220,7 @@ class DetectionOut(BaseModel):
     project_name: str | None = None
     country: str | None = None
     region: str | None = None
+    station_id: str | None = None
     station_code: str | None = None
     station_name: str | None = None
     individual_id: str | None
@@ -276,6 +284,10 @@ class MetadataPatch(BaseModel):
     longitude: float | None = None
     station_id: str | None = None
     notes: str | None = None
+    side: str | None = None
+    camera_make: str | None = Field(default=None, max_length=80)
+    camera_model: str | None = Field(default=None, max_length=80)
+    country: str | None = Field(default=None, max_length=80)
 
 
 class NamingClaimOut(BaseModel):

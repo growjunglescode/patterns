@@ -79,13 +79,14 @@ def complete_onboarding(
         user.role = "citizen"
         user.verified = True
 
-    # First account on an empty install becomes admin so solo testing works end-to-end.
-    # Also recover installs that somehow have users but no admin.
-    total_users = db.scalar(select(func.count()).select_from(User)) or 0
-    admin_users = db.scalar(select(func.count()).select_from(User).where(User.role == "admin")) or 0
-    if total_users <= 1 or admin_users == 0:
+    # Only the designated super-admin email may hold platform admin.
+    from app.admin_policy import enforce_admin_exclusivity, is_super_admin_email
+
+    if is_super_admin_email(user.email):
         user.role = "admin"
         user.verified = True
+    else:
+        enforce_admin_exclusivity(user)
 
     user.affiliation_type = affiliation
     user.organization = (organization or "").strip() or None

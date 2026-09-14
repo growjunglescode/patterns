@@ -69,7 +69,6 @@ export function navFor(role: string | null | undefined, opts?: { projectCount?: 
         { href: "/dashboard", label: "Dashboard", icon: "chart" },
         { href: "/model", label: "Model report", icon: "model" },
         { href: "/data", label: "Research data", icon: "table" },
-        { href: "/queues", label: "Name queue", icon: "queue" },
         ...((opts?.projectCount ?? 0) >= 2
           ? [{ href: "/portfolio", label: "Portfolio", icon: "grid" }]
           : []),

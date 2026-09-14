@@ -29,7 +29,7 @@ export default function OverviewPage() {
     if (!data) return [];
     return [
       { label: "Detections needing confirmation", value: data.to_review, note: "Needs identification", href: "/review", tone: "review" },
-      { label: "Names pending", value: data.names_pending, note: "Admin review", href: "/queues", tone: "review" },
+      { label: "Names pending", value: data.names_pending, note: "Admin review", href: "/review?tab=names", tone: "review" },
       { label: "Silence (180 days)", value: data.silent_180, note: "No recent detections", href: "/dashboard", tone: "warn" },
       { label: "New uncatalogued", value: data.new_unidentified, note: "Last 30 days", href: "/individuals", tone: "new" },
     ];
@@ -134,7 +134,7 @@ export default function OverviewPage() {
                 {claim.proposer_name}
               </p>
               <Link
-                href="/queues"
+                href="/review?tab=names"
                 className="rounded-md border border-ink/15 px-3 py-1 text-[12.5px] font-semibold"
               >
                 Review

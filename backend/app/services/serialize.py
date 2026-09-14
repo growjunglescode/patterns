@@ -161,6 +161,7 @@ def detection_out(
         project_name=project.name if project else None,
         country=_project_country(project),
         region=_project_region(project),
+        station_id=detection.station_id,
         station_code=station.code if station else None,
         station_name=station.name if station else None,
         individual_id=detection.individual_id,
