@@ -97,6 +97,15 @@ jobs:
               "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
             --cpu 1.0 --memory 2Gi
 
+          # Image updates can drop custom domain bindings — re-attach after each deploy.
+          CUSTOM_HOST="${CUSTOM_WEB_HOSTNAME:-app.wildpatterns.co}"
+          az containerapp hostname add -g "$RG" -n "${PREFIX}-web" --hostname "$CUSTOM_HOST" 2>/dev/null || true
+          az containerapp hostname bind -g "$RG" -n "${PREFIX}-web" \
+            --hostname "$CUSTOM_HOST" \
+            --environment "${PREFIX}-env" \
+            --validation-method CNAME || true
+
           echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Web: ${WEB_URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Custom: https://${CUSTOM_HOST}" >> "$GITHUB_STEP_SUMMARY"
           echo "- API: ${API_URL}" >> "$GITHUB_STEP_SUMMARY"
