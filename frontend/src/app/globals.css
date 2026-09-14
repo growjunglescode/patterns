@@ -622,6 +622,60 @@ thead th {
   box-shadow: none !important;
 }
 
+/* Admin RBAC preview menu — force dark high-contrast (ignore form/light overrides). */
+.role-view-trigger {
+  background: #070a09 !important;
+  color: #ffffff !important;
+  border: 1px solid #4a5c54 !important;
+  box-shadow: none !important;
+}
+.role-view-trigger .role-view-kicker {
+  color: #c4d0c8 !important;
+}
+.role-view-trigger .role-view-value {
+  color: #ffffff !important;
+}
+.role-view-menu {
+  background: #070a09 !important;
+  color: #ffffff !important;
+  border: 1px solid #4a5c54 !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75) !important;
+}
+.role-view-menu,
+.role-view-menu * {
+  color-scheme: dark;
+}
+.role-view-menu .role-view-heading {
+  color: #c4d0c8 !important;
+}
+.role-view-menu button {
+  background: transparent !important;
+  color: #ffffff !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  width: 100%;
+  text-align: left;
+}
+.role-view-menu button:hover,
+.role-view-menu button:active,
+.role-view-menu button[data-selected="true"] {
+  background: #1c2823 !important;
+}
+.role-view-menu button[data-selected="true"] {
+  background: #2a2418 !important;
+}
+.role-view-menu .role-view-label {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+.role-view-menu .role-view-selected {
+  color: #e8d5a3 !important;
+  font-weight: 700;
+}
+.role-view-menu .role-view-hint {
+  color: #c4d0c8 !important;
+}
+
 .ops .rounded-\[1\.4rem\],
 .ops .rounded-2xl,
 .ops .rounded-xl {
