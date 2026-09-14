@@ -149,10 +149,10 @@ export function RoleViewSwitcher({ compact = false }: { compact?: boolean }) {
         <ul
           role="listbox"
           aria-label="Choose RBAC role to preview"
-          className="fixed z-[100] max-h-[min(24rem,70vh)] w-[min(17.5rem,calc(100vw-1rem))] overflow-auto rounded-lg border border-[#2a3832] bg-[#0c1210] py-1 shadow-[0_20px_50px_rgba(0,0,0,0.55)]"
-          style={{ top: menuPos.top, right: menuPos.right }}
+          className="fixed z-[100] max-h-[min(24rem,70vh)] w-[min(17.5rem,calc(100vw-1rem))] overflow-auto rounded-lg border border-[#4a5c54] bg-[#070a09] py-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.7)]"
+          style={{ top: menuPos.top, right: menuPos.right, color: "#f4f7f5" }}
         >
-          <li className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8a9a92]">
+          <li className="px-3 pb-1.5 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[#c4d0c8]">
             Preview what each role sees
           </li>
           {ROLE_OPTIONS.map((role) => {
@@ -161,19 +161,28 @@ export function RoleViewSwitcher({ compact = false }: { compact?: boolean }) {
               <li key={role} role="option" aria-selected={selected}>
                 <button
                   type="button"
-                  className={`flex w-full flex-col px-3 py-2.5 text-left transition ${
-                    selected ? "bg-[#c4a35a]/18" : "hover:bg-[#18211d] active:bg-[#18211d]"
+                  className={`flex w-full flex-col px-3 py-3 text-left transition ${
+                    selected ? "bg-[#c4a35a]/28" : "hover:bg-[#1a2420] active:bg-[#1a2420]"
                   }`}
+                  style={{ color: "#f4f7f5" }}
                   onClick={() => {
                     setViewRole(role);
                     setOpen(false);
                   }}
                 >
                   <span className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-semibold text-[#e6ede8]">{roleLabel(role)}</span>
-                    {selected ? <span className="text-[11px] font-semibold text-[#c4a35a]">Selected</span> : null}
+                    <span className="text-[14px] font-bold tracking-tight" style={{ color: "#ffffff" }}>
+                      {roleLabel(role)}
+                    </span>
+                    {selected ? (
+                      <span className="text-[11px] font-bold" style={{ color: "#e8d5a3" }}>
+                        Selected
+                      </span>
+                    ) : null}
                   </span>
-                  <span className="mt-0.5 text-[11px] text-[#8a9a92]">{ROLE_HINT[role]}</span>
+                  <span className="mt-1 text-[12px] leading-snug" style={{ color: "#c4d0c8" }}>
+                    {ROLE_HINT[role]}
+                  </span>
                 </button>
               </li>
             );
