@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     match_threshold: float = 0.82
     suggest_threshold: float = 0.68
     # opencv | embedding | trained | auto
-    recognition_engine: str = "auto"
+    # Prefer ResNet coat embeddings when torch is available (falls back in select_engine).
+    recognition_engine: str = "embedding"
     # Path to coat-reid checkpoint from `python -m app.train_coat_reid`
     coat_model_path: str = ""
 

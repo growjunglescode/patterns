@@ -197,7 +197,11 @@ def _felid_score(bgr: np.ndarray, *, mono: bool) -> float:
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     warm = cv2.inRange(hsv, (5, 40, 40), (35, 255, 230))
     warm_ratio = float(np.count_nonzero(warm)) / warm.size
-    color_score = float(np.clip(0.45 * warm_ratio + 0.55 * pattern, 0, 1))
+    # Daylight coats: weight texture more once any warm fur is present.
+    if warm_ratio >= 0.06:
+        color_score = float(np.clip(0.30 * warm_ratio + 0.70 * pattern, 0, 1))
+    else:
+        color_score = float(np.clip(0.45 * warm_ratio + 0.55 * pattern, 0, 1))
     # Melanistic: low warm ratio but dark coherent body + residual ghost spots.
     dark_ratio = float(np.mean(gray < 60))
     if dark_ratio > 0.35 and warm_ratio < 0.12:
@@ -283,7 +287,7 @@ def analyze_image(image_bytes: bytes) -> DetectionResult:
         return DetectionResult(False, "unreadable", 0.0, "Could not locate animal region", [], None)
 
     score = best_score
-    is_jaguar = score >= 0.38
+    is_jaguar = score >= 0.30
     if is_jaguar:
         label = "jaguar"
         mode = "IR trail-cam" if mono else "color"
@@ -291,7 +295,7 @@ def analyze_image(image_bytes: bytes) -> DetectionResult:
             f"Spotted felid pattern detected ({mode}, confidence {score:.0%}). "
             "Coat fingerprint extracted for individual matching."
         )
-    elif score >= 0.22:
+    elif score >= 0.18:
         label = "possible_felid"
         summary = (
             f"Possible spotted cat, not confidently a jaguar ({score:.0%}). "

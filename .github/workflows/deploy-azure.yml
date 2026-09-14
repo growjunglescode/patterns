@@ -128,6 +128,7 @@ jobs:
             --set-env-vars \
               "CORS_ORIGINS=${WEB_URL},https://${CUSTOM_HOST},http://localhost:3000" \
               "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+              "RECOGNITION_ENGINE=embedding" \
             --cpu 1.0 --memory 2Gi
 
           # Safety net: if a CLI quirk drops the binding, restore immediately.
