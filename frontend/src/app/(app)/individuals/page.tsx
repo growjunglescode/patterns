@@ -95,29 +95,32 @@ function IndividualsGrid() {
                   {LIFE[ind.life_status] || ind.life_status}
                 </span>
               </div>
-              <div className="relative space-y-2 p-4 sm:p-5">
-                <p className="font-display text-[1.35rem] font-semibold tracking-tight text-ink">{ind.display_name}</p>
-                <p className="font-mono text-[12px] text-ink/45">
-                  {ind.code} · {ind.species} · {ind.sex || "—"}
-                </p>
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-2 pt-1 text-[12px]">
+              <div className="relative space-y-3 p-4 sm:p-5">
+                <div>
+                  <p className="font-display text-[1.35rem] font-semibold tracking-tight text-ink">{ind.display_name}</p>
+                  <p className="mt-1 font-mono text-[12px] text-ink/45">
+                    {ind.code} · {ind.species}
+                    {ind.sex ? ` · ${ind.sex}` : ""}
+                  </p>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-ink/10 pt-3 text-[12.5px]">
                   <div>
-                    <dt className="text-[10px] uppercase tracking-[0.12em] text-ink/35">Added</dt>
-                    <dd className="mt-0.5 text-ink/75">{fmtDate(ind.created_at || ind.first_seen)}</dd>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/45">Added</dt>
+                    <dd className="mt-1 text-ink/75">{fmtDate(ind.created_at || ind.first_seen)}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] uppercase tracking-[0.12em] text-ink/35">Last seen</dt>
-                    <dd className="mt-0.5 text-ink/75">{fmtDate(ind.last_seen)}</dd>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/45">Last seen</dt>
+                    <dd className="mt-1 text-ink/75">{fmtDate(ind.last_seen || ind.first_seen)}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] uppercase tracking-[0.12em] text-ink/35">Pictures</dt>
-                    <dd className="mt-0.5 text-ink/75">
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/45">Pictures</dt>
+                    <dd className="mt-1 text-ink/75">
                       {pictures} {pictures === 1 ? "picture" : "pictures"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] uppercase tracking-[0.12em] text-ink/35">Status</dt>
-                    <dd className="mt-0.5 truncate text-ink/75">{ind.identity_status}</dd>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/45">Country</dt>
+                    <dd className="mt-1 truncate text-ink/75">{ind.country || "—"}</dd>
                   </div>
                 </dl>
               </div>

@@ -270,14 +270,14 @@ function AppShellChrome({
             </div>
           </Link>
           <p className="mt-2 px-3 pb-1 text-[10px] leading-snug text-white/35">
-            Brought to you by{" "}
+            In partnership with{" "}
             <a
               href="https://growjungles.com/"
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-[#c4a35a]/90 underline-offset-2 hover:text-[#c4a35a] hover:underline"
             >
-              GrowJungles
+              Grow Jungles
             </a>
             {" & "}
             <a
@@ -348,14 +348,14 @@ function AppShellChrome({
             )}
             <p className="min-w-0 truncate text-[9px] leading-snug text-[#8a9a92] sm:text-[11px]">
               <span className="sm:hidden">By </span>
-              <span className="hidden sm:inline">Brought to you by </span>
+              <span className="hidden sm:inline">In partnership with </span>
               <a
                 href="https://growjungles.com/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-medium text-[#c4a35a] underline-offset-2 hover:underline"
               >
-                GrowJungles
+                Grow Jungles
               </a>
               {" & "}
               <a

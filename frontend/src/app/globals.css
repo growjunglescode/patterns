@@ -587,14 +587,20 @@ thead th {
   background-color: var(--canvas) !important;
 }
 
+.ops .text-ink\/35,
 .ops .text-ink\/40,
 .ops .text-ink\/45,
 .ops .text-ink\/50,
 .ops .text-ink\/55,
 .ops .text-ink\/60,
 .ops .text-ink\/70,
+.ops .text-ink\/75,
 .ops .text-muted {
   color: var(--muted) !important;
+}
+
+.ops .text-ink\/75 {
+  color: color-mix(in srgb, var(--ink) 78%, transparent) !important;
 }
 
 .ops .text-forest {
