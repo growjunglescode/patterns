@@ -65,6 +65,10 @@ class ProfilePatch(BaseModel):
     city: str | None = Field(default=None, max_length=80)
     study_country: str | None = Field(default=None, max_length=80)
     study_region: str | None = Field(default=None, max_length=120)
+    affiliation_type: str | None = Field(
+        default=None,
+        description="university | institution | organization | hobby",
+    )
 
 
 class OnboardingStationIn(BaseModel):

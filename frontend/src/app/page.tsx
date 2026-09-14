@@ -89,6 +89,7 @@ export default function HomePage() {
             onChange={(e) => setEmail(e.target.value)}
             required
             autoComplete="email"
+            placeholder="Email"
             aria-label="Email"
           />
           <input
@@ -97,6 +98,7 @@ export default function HomePage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoComplete="current-password"
+            placeholder="Password"
             aria-label="Password"
           />
           <button type="submit" className="btn-forest w-full">

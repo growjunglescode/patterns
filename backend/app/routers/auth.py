@@ -142,6 +142,11 @@ def patch_me(
         user.study_country = payload.study_country.strip() or None
     if payload.study_region is not None:
         user.study_region = payload.study_region.strip() or None
+    if payload.affiliation_type is not None:
+        affiliation = payload.affiliation_type.strip().lower()
+        if affiliation and affiliation not in {"university", "institution", "organization", "hobby"}:
+            raise HTTPException(status_code=400, detail="Choose university, institute, organization, or hobby")
+        user.affiliation_type = affiliation or None
     db.commit()
     db.refresh(user)
     return user_out(user)

@@ -6,10 +6,37 @@ import { api, type User } from "@/lib/api";
 import { InstitutionAutocomplete } from "@/components/InstitutionAutocomplete";
 import { roleLabel } from "@/lib/roles";
 
+type Affiliation = "university" | "institution" | "organization" | "hobby" | "";
+
+const AFFILIATION_OPTIONS: { value: Exclude<Affiliation, "">; label: string }[] = [
+  { value: "university", label: "University" },
+  { value: "institution", label: "Institute" },
+  { value: "organization", label: "Organization" },
+  { value: "hobby", label: "Hobby / citizen scientist" },
+];
+
+function orgFieldCopy(affiliation: Affiliation) {
+  if (affiliation === "university") {
+    return { label: "University name", placeholder: "Start typing a university…" };
+  }
+  if (affiliation === "institution") {
+    return { label: "Institute name", placeholder: "Start typing an institute or NGO…" };
+  }
+  if (affiliation === "organization") {
+    return { label: "Organization name", placeholder: "Start typing an organization…" };
+  }
+  return {
+    label: "University, institute, or organization",
+    placeholder: "Start typing a university, institute, or organization…",
+  };
+}
+
 export default function ProfileSettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [displayName, setDisplayName] = useState("");
+  const [affiliation, setAffiliation] = useState<Affiliation>("");
   const [organization, setOrganization] = useState("");
   const [bio, setBio] = useState("");
   const [orcid, setOrcid] = useState("");
@@ -24,19 +51,33 @@ export default function ProfileSettingsPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    api.me().then((me) => {
-      setUser(me);
-      setDisplayName(me.display_name);
-      setOrganization(me.organization || "");
-      setBio(me.bio || "");
-      setOrcid(me.orcid || "");
-      setPhone(me.phone || "");
-      setCountry(me.country || "");
-      setCity(me.city || "");
-      setStudyCountry(me.study_country || "");
-      setStudyRegion(me.study_region || "");
-      setShared(Boolean(me.profile_public));
-    });
+    let cancelled = false;
+    api
+      .me()
+      .then((me) => {
+        if (cancelled) return;
+        setUser(me);
+        setDisplayName(me.display_name);
+        setAffiliation((me.affiliation_type as Affiliation) || "");
+        setOrganization(me.organization || "");
+        setBio(me.bio || "");
+        setOrcid(me.orcid || "");
+        setPhone(me.phone || "");
+        setCountry(me.country || "");
+        setCity(me.city || "");
+        setStudyCountry(me.study_country || "");
+        setStudyRegion(me.study_region || "");
+        setShared(Boolean(me.profile_public));
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load profile");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function onSubmit(e: FormEvent) {
@@ -46,6 +87,7 @@ export default function ProfileSettingsPage() {
     try {
       const updated = await api.patchMe({
         display_name: displayName,
+        affiliation_type: affiliation || null,
         organization,
         bio,
         orcid,
@@ -57,6 +99,7 @@ export default function ProfileSettingsPage() {
         profile_public: shared,
       });
       setUser(updated);
+      setAffiliation((updated.affiliation_type as Affiliation) || "");
       setSaved("Profile saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save");
@@ -75,8 +118,21 @@ export default function ProfileSettingsPage() {
     router.push("/");
   }
 
-  if (!user) return <p className="text-ink/40">Loading profile…</p>;
+  if (loading) return <p className="text-ink/40">Loading profile…</p>;
+  if (!user) {
+    return (
+      <div className="surface space-y-3 p-6">
+        <p className="text-sm text-red-700">{error || "Could not load profile."}</p>
+        <button type="button" className="btn-forest" onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/p/${user.id}` : `/p/${user.id}`;
+  const orgCopy = orgFieldCopy(affiliation);
+  const showOrgName = affiliation !== "hobby";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -88,18 +144,40 @@ export default function ProfileSettingsPage() {
           Display name
           <input className="mt-1" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
         </label>
-        <label className="block text-[13px]">
-          Institution or project
-          <InstitutionAutocomplete
-            value={organization}
-            onChange={setOrganization}
-            onSelect={(row) => {
-              if (row.country && !country.trim()) setCountry(row.country);
-              if (row.city && !city.trim()) setCity(row.city);
-            }}
-            placeholder="Start typing a university or institution…"
-          />
-        </label>
+        <fieldset>
+          <legend className="text-[13px]">Affiliation</legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {AFFILIATION_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setAffiliation(option.value)}
+                className={`rounded-xl border px-3 py-2.5 text-left text-[13px] font-medium transition ${
+                  affiliation === option.value
+                    ? "border-gold/50 bg-gold/10 text-ink"
+                    : "border-ink/10 bg-paper text-ink/70 hover:border-ink/20"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+        {showOrgName && (
+          <label className="block text-[13px]">
+            {orgCopy.label}
+            <InstitutionAutocomplete
+              value={organization}
+              affiliation={affiliation || undefined}
+              onChange={setOrganization}
+              onSelect={(row) => {
+                if (row.country && !country.trim()) setCountry(row.country);
+                if (row.city && !city.trim()) setCity(row.city);
+              }}
+              placeholder={orgCopy.placeholder}
+            />
+          </label>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block text-[13px]">
             Phone
@@ -137,7 +215,9 @@ export default function ProfileSettingsPage() {
           <p className="section-title">Access</p>
           <p className="mt-3 font-medium">{roleLabel(user.role)}</p>
           <p className="mt-1 text-[13px] text-ink/55">{user.email}</p>
-          <p className="mt-1 text-[13px] text-ink/55">{user.verified ? "Verified" : "Pending verification"} · {user.photo_count ?? 0} photos logged</p>
+          <p className="mt-1 text-[13px] text-ink/55">
+            {user.verified ? "Verified" : "Pending verification"} · {user.photo_count ?? 0} photos logged
+          </p>
           <button type="button" onClick={logout} className="mt-4 text-[13px] font-semibold text-gold-deep">
             Sign out
           </button>

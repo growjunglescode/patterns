@@ -33,6 +33,7 @@ export function InstitutionAutocomplete({
   const [active, setActive] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const skipSearch = useRef(false);
+  const userEdited = useRef(false);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -45,6 +46,13 @@ export function InstitutionAutocomplete({
   useEffect(() => {
     if (skipSearch.current) {
       skipSearch.current = false;
+      return;
+    }
+    // Don't hit the worldwide registry just because the profile hydrated an existing name.
+    if (!userEdited.current) {
+      setResults([]);
+      setOpen(false);
+      setLoading(false);
       return;
     }
     const q = value.trim();
@@ -82,6 +90,7 @@ export function InstitutionAutocomplete({
 
   function choose(row: InstitutionSuggestion) {
     skipSearch.current = true;
+    userEdited.current = true;
     onChange(row.name);
     onSelect?.(row);
     setOpen(false);
@@ -96,7 +105,10 @@ export function InstitutionAutocomplete({
         required={required}
         autoComplete="off"
         placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          userEdited.current = true;
+          onChange(e.target.value);
+        }}
         onFocus={() => {
           if (results.length) setOpen(true);
         }}

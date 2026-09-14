@@ -88,7 +88,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .catch(() => {
         if (!["/login", "/register", "/", "/onboarding"].includes(pathname)) router.push("/");
       });
-  }, [pathname, router]);
+    // Load once per session in the shell — re-fetching on every route change made Settings feel stuck.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   function search(e: FormEvent) {
     e.preventDefault();
