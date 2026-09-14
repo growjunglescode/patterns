@@ -1,4 +1,5 @@
-// Patterns - Azure Container Apps + PostgreSQL + Blob Storage
+// Patterns - Azure platform (Postgres, ACR, storage, Container Apps environment)
+// Container Apps themselves are bootstrapped once — see apps-bootstrap.bicep
 targetScope = 'subscription'
 
 @description('Azure region')
@@ -25,5 +26,7 @@ module platform 'app.bicep' = {
   }
 }
 
-output webUrl string = platform.outputs.webUrl
-output apiUrl string = platform.outputs.apiUrl
+output envName string = platform.outputs.envName
+output acrName string = platform.outputs.acrName
+output storageName string = platform.outputs.storageName
+output keyVaultName string = platform.outputs.keyVaultName

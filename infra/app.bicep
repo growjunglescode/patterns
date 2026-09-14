@@ -106,84 +106,15 @@ resource kv 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-resource api 'Microsoft.App/containerApps@2024-03-01' = {
-  name: '${prefix}-api'
-  location: location
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: {
-      '${identity.id}': {}
-    }
-  }
-  properties: {
-    managedEnvironmentId: env.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8000
-      }
-    }
-    template: {
-      containers: [
-        {
-          name: 'api'
-          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
-          env: [
-            {
-              name: 'DATABASE_URL'
-              value: 'postgresql+psycopg2://patterns:${postgresPassword}@${postgres.properties.fullyQualifiedDomainName}:5432/patterns?sslmode=require'
-            }
-            {
-              name: 'AZURE_STORAGE_CONNECTION_STRING'
-              value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${listKeys(storage.id, storage.apiVersion).keys[0].value};EndpointSuffix=core.windows.net'
-            }
-            {
-              name: 'AZURE_STORAGE_CONTAINER'
-              value: 'jaguar-media'
-            }
-            {
-              name: 'SECRET_KEY'
-              value: uniqueString(resourceGroup().id, 'jwt')
-            }
-          ]
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
-        }
-      ]
-    }
-  }
-}
+// Container Apps are intentionally NOT managed here.
+// Redeploying them via Bicep wiped custom domain / certificate bindings on every CI push.
+// Apps are created once (infra/apps-bootstrap.bicep) and updated with `az containerapp update`.
 
-resource web 'Microsoft.App/containerApps@2024-03-01' = {
-  name: '${prefix}-web'
-  location: location
-  properties: {
-    managedEnvironmentId: env.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 3000
-      }
-    }
-    template: {
-      containers: [
-        {
-          name: 'web'
-          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
-          resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
-          }
-        }
-      ]
-    }
-  }
-}
-
-output webUrl string = 'https://${web.properties.configuration.ingress.fqdn}'
-output apiUrl string = 'https://${api.properties.configuration.ingress.fqdn}'
+output envId string = env.id
+output envName string = env.name
+output identityId string = identity.id
+output postgresFqdn string = postgres.properties.fullyQualifiedDomainName
 output acrName string = acr.name
 output storageName string = storage.name
+output storageConnectionString string = 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${listKeys(storage.id, storage.apiVersion).keys[0].value};EndpointSuffix=core.windows.net'
 output keyVaultName string = kv.name

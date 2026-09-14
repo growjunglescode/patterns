@@ -18,6 +18,7 @@ permissions:
 env:
   PREFIX: patterns
   LOCATION: eastus2
+  CUSTOM_WEB_HOSTNAME: app.wildpatterns.co
 
 jobs:
   deploy:
@@ -32,7 +33,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Ensure resource group + platform
+      - name: Ensure platform (no Container App rewrite)
         env:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         run: |
@@ -41,11 +42,35 @@ jobs:
             echo "Set repo secret POSTGRES_PASSWORD first."
             exit 1
           fi
+          # Platform only: Postgres/ACR/storage/env. Do NOT redeploy Container Apps here —
+          # Bicep PUT on apps wiped custom domains on every push.
           az deployment sub create \
             --name patterns-platform \
             --location "$LOCATION" \
             --template-file infra/main.bicep \
             --parameters prefix="$PREFIX" location="$LOCATION" postgresPassword="$POSTGRES_PASSWORD"
+
+          RG="${PREFIX}-rg"
+          if ! az containerapp show -g "$RG" -n "${PREFIX}-web" &>/dev/null; then
+            echo "Bootstrapping Container Apps (first run only)…"
+            ENV_ID=$(az containerapp env show -g "$RG" -n "${PREFIX}-env" --query id -o tsv)
+            IDENTITY_ID=$(az identity show -g "$RG" -n "${PREFIX}-id" --query id -o tsv)
+            PG_FQDN=$(az postgres flexible-server show -g "$RG" -n "${PREFIX}-pg" --query fullyQualifiedDomainName -o tsv)
+            STORAGE=$(az storage account list -g "$RG" --query "[0].name" -o tsv)
+            STORAGE_CS=$(az storage account show-connection-string -g "$RG" -n "$STORAGE" --query connectionString -o tsv)
+            az deployment group create \
+              --resource-group "$RG" \
+              --name patterns-apps-bootstrap \
+              --template-file infra/apps-bootstrap.bicep \
+              --parameters \
+                prefix="$PREFIX" \
+                location="$LOCATION" \
+                postgresPassword="$POSTGRES_PASSWORD" \
+                postgresFqdn="$PG_FQDN" \
+                storageConnectionString="$STORAGE_CS" \
+                environmentId="$ENV_ID" \
+                identityId="$IDENTITY_ID"
+          fi
 
       - name: Read ACR + app URLs
         id: out
@@ -74,36 +99,49 @@ jobs:
           docker push "$ACR.azurecr.io/patterns-api:${{ github.sha }}"
           docker push "$ACR.azurecr.io/patterns-web:${{ github.sha }}"
 
-      - name: Update Container Apps
+      - name: Update Container Apps (preserve custom domain)
         run: |
           set -euo pipefail
           RG="${PREFIX}-rg"
           ACR="${{ steps.out.outputs.acr }}"
           API_URL="${{ steps.out.outputs.api_url }}"
           WEB_URL="${{ steps.out.outputs.web_url }}"
+          CUSTOM_HOST="${CUSTOM_WEB_HOSTNAME}"
+
+          # Snapshot domain binding before any mutation.
+          DOMAIN_JSON=$(az containerapp show -g "$RG" -n "${PREFIX}-web" \
+            --query "properties.configuration.ingress.customDomains" -o json)
+          echo "Custom domains before update: ${DOMAIN_JSON}"
 
           ACR_USER=$(az acr credential show -n "$ACR" --query username -o tsv)
           ACR_PASS=$(az acr credential show -n "$ACR" --query "passwords[0].value" -o tsv)
           az containerapp registry set -g "$RG" -n "${PREFIX}-api" --server "$ACR.azurecr.io" --username "$ACR_USER" --password "$ACR_PASS"
           az containerapp registry set -g "$RG" -n "${PREFIX}-web" --server "$ACR.azurecr.io" --username "$ACR_USER" --password "$ACR_PASS"
 
+          # Image-only updates (no Bicep rewrite of the app).
           az containerapp update -g "$RG" -n "${PREFIX}-web" \
             --image "$ACR.azurecr.io/patterns-web:${{ github.sha }}"
 
           az containerapp update -g "$RG" -n "${PREFIX}-api" \
             --image "$ACR.azurecr.io/patterns-api:${{ github.sha }}" \
             --set-env-vars \
-              "CORS_ORIGINS=${WEB_URL},https://app.wildpatterns.co,http://localhost:3000" \
+              "CORS_ORIGINS=${WEB_URL},https://${CUSTOM_HOST},http://localhost:3000" \
               "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
             --cpu 1.0 --memory 2Gi
 
-          # Image updates can drop custom domain bindings — re-attach after each deploy.
-          CUSTOM_HOST="${CUSTOM_WEB_HOSTNAME:-app.wildpatterns.co}"
-          az containerapp hostname add -g "$RG" -n "${PREFIX}-web" --hostname "$CUSTOM_HOST" 2>/dev/null || true
-          az containerapp hostname bind -g "$RG" -n "${PREFIX}-web" \
-            --hostname "$CUSTOM_HOST" \
-            --environment "${PREFIX}-env" \
-            --validation-method CNAME || true
+          # Safety net: if a CLI quirk drops the binding, restore immediately.
+          BOUND=$(az containerapp show -g "$RG" -n "${PREFIX}-web" \
+            --query "properties.configuration.ingress.customDomains[?name=='${CUSTOM_HOST}'].bindingType | [0]" -o tsv)
+          if [ "${BOUND}" != "SniEnabled" ]; then
+            echo "Restoring custom domain ${CUSTOM_HOST}…"
+            az containerapp hostname add -g "$RG" -n "${PREFIX}-web" --hostname "$CUSTOM_HOST" 2>/dev/null || true
+            az containerapp hostname bind -g "$RG" -n "${PREFIX}-web" \
+              --hostname "$CUSTOM_HOST" \
+              --environment "${PREFIX}-env" \
+              --validation-method CNAME
+          else
+            echo "Custom domain ${CUSTOM_HOST} still bound (SniEnabled)."
+          fi
 
           echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Web: ${WEB_URL}" >> "$GITHUB_STEP_SUMMARY"

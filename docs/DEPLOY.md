@@ -147,7 +147,13 @@ az group delete -n patterns-rg --yes --no-wait
 
 ---
 
-## Google (Gmail) sign-in
+## Custom domain (`app.wildpatterns.co`)
+
+Container Apps are **not** rewritten by Bicep on each deploy. Redeploying the app resource via ARM/Bicep was wiping the managed certificate binding and taking the custom domain offline during every push.
+
+- Platform (Postgres, ACR, storage, env): `infra/main.bicep` + `infra/app.bicep`
+- First-time apps only: `infra/apps-bootstrap.bicep`
+- Routine deploys: image update + verify `app.wildpatterns.co` stays `SniEnabled`
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials.
 2. Create an **OAuth client ID** → Application type **Web application**.
