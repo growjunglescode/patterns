@@ -346,9 +346,8 @@ function AppShellChrome({
                 ))}
               </select>
             )}
-            <p className="min-w-0 truncate text-[9px] leading-snug text-[#8a9a92] sm:text-[11px]">
-              <span className="sm:hidden">By </span>
-              <span className="hidden sm:inline">In partnership with </span>
+            <p className="min-w-0 text-[9px] leading-snug text-[#8a9a92] sm:text-[11px]">
+              In partnership with{" "}
               <a
                 href="https://growjungles.com/"
                 target="_blank"
