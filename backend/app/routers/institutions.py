@@ -48,7 +48,7 @@ def _city(item: dict) -> str | None:
 def search_institutions(
     q: str = Query("", min_length=0, max_length=160),
     limit: int = Query(12, ge=1, le=25),
-    affiliation: str | None = Query(None, description="university | institution"),
+    affiliation: str | None = Query(None, description="university | institution | organization"),
     _: User = Depends(get_current_user),
 ) -> dict:
     """Worldwide university / research-org lookup via Research Organization Registry (ROR)."""
@@ -67,6 +67,7 @@ def search_institutions(
     preferred = (affiliation or "").strip().lower()
     prefer_education = preferred == "university"
     prefer_facility = preferred == "institution"
+    prefer_organization = preferred == "organization"
 
     ranked: list[tuple[int, dict]] = []
     for item in payload.get("items") or []:
@@ -79,6 +80,8 @@ def search_institutions(
             score += 5
         if prefer_facility and any(t in types for t in ("facility", "nonprofit", "government", "healthcare", "other")):
             score += 4
+        if prefer_organization and any(t in types for t in ("company", "nonprofit", "government", "facility", "other")):
+            score += 5
         if query.lower() in name.lower():
             score += 3
         if name.lower().startswith(query.lower()):

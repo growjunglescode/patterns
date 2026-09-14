@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     azure_storage_connection_string: str | None = None
     azure_storage_container: str = "jaguar-media"
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    # Web client ID from Google Cloud Console (OAuth 2.0). Empty = Google sign-in disabled.
+    google_client_id: str = ""
     match_threshold: float = 0.82
     suggest_threshold: float = 0.68
     # opencv | embedding | trained | auto

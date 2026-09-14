@@ -7,7 +7,7 @@ import { InstitutionAutocomplete } from "@/components/InstitutionAutocomplete";
 import { api, type User } from "@/lib/api";
 import { writeProjectId } from "@/lib/project";
 
-type Affiliation = "university" | "institution" | "hobby" | "";
+type Affiliation = "university" | "institution" | "organization" | "hobby" | "";
 
 type StationDraft = { name: string; code: string };
 
@@ -31,7 +31,8 @@ export default function OnboardingPage() {
   const [bio, setBio] = useState("");
   const [stations, setStations] = useState<StationDraft[]>([{ name: "", code: "" }]);
 
-  const needsTraps = affiliation === "university" || affiliation === "institution";
+  const needsTraps =
+    affiliation === "university" || affiliation === "institution" || affiliation === "organization";
 
   useEffect(() => {
     api
@@ -156,15 +157,19 @@ export default function OnboardingPage() {
               <div className="grid gap-3">
                 {(
                   [
-                    ["university", "University / research lab", "Academic fieldwork and publications"],
-                    ["institution", "Institution / NGO", "Conservation or government program"],
+                    ["university", "University", "Academic lab, department, or research group"],
+                    ["institution", "Institute", "Research institute, museum, or conservation NGO"],
+                    ["organization", "Organization", "Company, foundation, agency, or field partner"],
                     ["hobby", "Hobby / citizen scientist", "Personal uploads and learning"],
                   ] as const
                 ).map(([value, label, note]) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => setAffiliation(value)}
+                    onClick={() => {
+                      setAffiliation(value);
+                      setOrganization("");
+                    }}
                     className={`rounded-xl border px-4 py-3 text-left transition ${
                       affiliation === value
                         ? "border-[#c4a35a]/55 bg-[#c4a35a]/10"
@@ -179,7 +184,11 @@ export default function OnboardingPage() {
               {needsTraps && (
                 <>
                   <label className="block text-[13px] text-[#8a9a92]">
-                    University or institution name
+                    {affiliation === "university"
+                      ? "University name"
+                      : affiliation === "institution"
+                        ? "Institute name"
+                        : "Organization name"}
                     <InstitutionAutocomplete
                       value={organization}
                       required
@@ -187,7 +196,9 @@ export default function OnboardingPage() {
                       placeholder={
                         affiliation === "university"
                           ? "Start typing a university…"
-                          : "Start typing an institution or NGO…"
+                          : affiliation === "institution"
+                            ? "Start typing an institute or NGO…"
+                            : "Start typing an organization…"
                       }
                       onChange={setOrganization}
                       onSelect={(row) => {

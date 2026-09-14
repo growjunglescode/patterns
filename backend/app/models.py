@@ -23,12 +23,14 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(120))
     role: Mapped[str] = mapped_column(String(24), default="citizen")  # admin|scientist|citizen|viewer
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    google_sub: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    auth_provider: Mapped[str] = mapped_column(String(24), default="password")  # password|google|both
     orcid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     organization: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     profile_public: Mapped[bool] = mapped_column(Boolean, default=False)
     # Onboarding / field profile
-    affiliation_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # university|institution|hobby
+    affiliation_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)  # university|institution|organization|hobby
     phone: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     country: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     city: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)

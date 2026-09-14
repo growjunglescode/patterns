@@ -65,10 +65,10 @@ def complete_onboarding(
     stations: list[dict],
 ) -> User:
     affiliation = (affiliation_type or "").strip().lower()
-    if affiliation not in {"university", "institution", "hobby"}:
-        raise ValueError("Choose university, institution, or hobby")
+    if affiliation not in {"university", "institution", "organization", "hobby"}:
+        raise ValueError("Choose university, institute, organization, or hobby")
 
-    if affiliation in {"university", "institution"}:
+    if affiliation in {"university", "institution", "organization"}:
         user.role = "scientist"
         user.verified = False
         if not (study_country or "").strip():
@@ -102,7 +102,7 @@ def complete_onboarding(
 
     org_name = user.organization
     org = None
-    if org_name and affiliation in {"university", "institution"}:
+    if org_name and affiliation in {"university", "institution", "organization"}:
         org_slug = unique_project_slug(db, org_name)  # reuse uniqueness pattern on org table
         existing_org = db.scalar(select(Organization).where(Organization.name == org_name))
         if existing_org:

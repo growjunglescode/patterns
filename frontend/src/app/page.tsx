@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CoatPrint, Grain, TopoPrint, Wordmark } from "@/components/Brand";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { api, token } from "@/lib/api";
 
 export default function HomePage() {
@@ -101,6 +102,7 @@ export default function HomePage() {
           <button type="submit" className="btn-forest w-full">
             Continue
           </button>
+          <GoogleSignInButton onError={setError} />
           <p className="text-sm text-muted">
             New here?{" "}
             <Link href="/register" className="font-semibold text-gold-deep">

@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CoatPrint, Grain, TopoPrint, Wordmark } from "@/components/Brand";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { api } from "@/lib/api";
 
 export default function RegisterPage() {
@@ -50,6 +51,7 @@ export default function RegisterPage() {
           <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           <input type="password" minLength={8} placeholder="Password (8+ characters)" value={password} onChange={(e) => setPassword(e.target.value)} required />
           <button className="btn-forest w-full">Continue to profile setup</button>
+          <GoogleSignInButton onError={setError} />
           <p className="text-sm text-muted">
             Already have access?{" "}
             <Link href="/" className="font-semibold text-gold-deep">

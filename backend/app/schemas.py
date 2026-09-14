@@ -8,6 +8,15 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
+class GoogleAuthRequest(BaseModel):
+    id_token: str = Field(min_length=20)
+
+
+class AuthProvidersOut(BaseModel):
+    google: bool
+    google_client_id: str | None = None
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
@@ -66,7 +75,7 @@ class OnboardingStationIn(BaseModel):
 
 
 class OnboardingRequest(BaseModel):
-    affiliation_type: str = Field(description="university | institution | hobby")
+    affiliation_type: str = Field(description="university | institution | organization | hobby")
     organization: str | None = Field(default=None, max_length=160)
     phone: str | None = Field(default=None, max_length=40)
     country: str = Field(min_length=2, max_length=80)

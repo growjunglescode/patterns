@@ -147,6 +147,26 @@ az group delete -n patterns-rg --yes --no-wait
 
 ---
 
+## Google (Gmail) sign-in
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services → Credentials.
+2. Create an **OAuth client ID** → Application type **Web application**.
+3. Under **Authorized JavaScript origins**, add:
+   - `http://localhost:3000`
+   - `https://app.wildpatterns.co`
+   - your Azure web URL (`https://patterns-web....azurecontainerapps.io`)
+4. Copy the **Client ID**.
+5. Set it on the API (Azure) and as a GitHub secret for deploys:
+
+```powershell
+az containerapp update -g patterns-rg -n patterns-api --set-env-vars "GOOGLE_CLIENT_ID=YOUR_CLIENT_ID.apps.googleusercontent.com"
+gh secret set GOOGLE_CLIENT_ID --body "YOUR_CLIENT_ID.apps.googleusercontent.com"
+```
+
+6. Redeploy (or refresh the API container). Sign-in and register pages show **Continue with Google** when the client ID is set.
+
+---
+
 ## Stuck?
 
 | Problem | Fix |

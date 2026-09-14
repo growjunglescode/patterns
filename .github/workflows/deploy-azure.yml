@@ -92,7 +92,9 @@ jobs:
 
           az containerapp update -g "$RG" -n "${PREFIX}-api" \
             --image "$ACR.azurecr.io/patterns-api:${{ github.sha }}" \
-            --set-env-vars "CORS_ORIGINS=${WEB_URL}" \
+            --set-env-vars \
+              "CORS_ORIGINS=${WEB_URL},https://app.wildpatterns.co,http://localhost:3000" \
+              "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
             --cpu 1.0 --memory 2Gi
 
           echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"

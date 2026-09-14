@@ -14,6 +14,7 @@ numpy==1.26.4
 opencv-python-headless==4.10.0.84
 azure-storage-blob==12.24.0
 httpx==0.28.1
+google-auth==2.37.0
 pytest==8.3.4
 # Optional ML engine (CPU wheels). If install fails, embedding engine falls back to OpenCV.
 torch>=2.2.0

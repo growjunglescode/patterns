@@ -253,6 +253,16 @@ export const api = {
     localStorage.setItem("patterns_token", data.access_token);
     return data;
   },
+  loginWithGoogle: async (idToken: string) => {
+    const data = await request<{ access_token: string }>("/api/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ id_token: idToken }),
+    });
+    localStorage.setItem("patterns_token", data.access_token);
+    return data;
+  },
+  authProviders: () =>
+    request<{ google: boolean; google_client_id?: string | null }>("/api/auth/providers"),
   me: () => request<User>("/api/auth/me"),
   patchMe: (body: object) => request<User>("/api/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
   completeOnboarding: (body: object) =>

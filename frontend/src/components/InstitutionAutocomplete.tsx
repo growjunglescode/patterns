@@ -23,7 +23,7 @@ export function InstitutionAutocomplete({
   value: string;
   onChange: (value: string) => void;
   onSelect?: (row: InstitutionSuggestion) => void;
-  affiliation?: "university" | "institution" | string;
+  affiliation?: "university" | "institution" | "organization" | string;
   placeholder?: string;
   required?: boolean;
 }) {

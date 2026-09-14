@@ -50,6 +50,8 @@ def ensure_columns() -> None:
         "ALTER TABLE users ADD COLUMN onboarding_complete BOOLEAN DEFAULT 0",
         "ALTER TABLE users ADD COLUMN home_project_id VARCHAR(36)",
         "ALTER TABLE projects ADD COLUMN created_by_id VARCHAR(36)",
+        "ALTER TABLE users ADD COLUMN google_sub VARCHAR(64)",
+        "ALTER TABLE users ADD COLUMN auth_provider VARCHAR(24) DEFAULT 'password'",
     ]
     for sql in statements:
         try:
