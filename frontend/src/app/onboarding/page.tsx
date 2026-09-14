@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CoatPrint, Grain, Wordmark } from "@/components/Brand";
 import { CountryCityFields, CountrySelect } from "@/components/CountryCityFields";
+import { InstitutionAutocomplete } from "@/components/InstitutionAutocomplete";
 import { api, type User } from "@/lib/api";
 import { writeProjectId } from "@/lib/project";
 
@@ -22,6 +23,7 @@ export default function OnboardingPage() {
 
   const [affiliation, setAffiliation] = useState<Affiliation>("");
   const [organization, setOrganization] = useState("");
+  const [orgPreferCountry, setOrgPreferCountry] = useState("");
   const [projectName, setProjectName] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
@@ -169,6 +171,7 @@ export default function OnboardingPage() {
                     onClick={() => {
                       setAffiliation(value);
                       setOrganization("");
+                      setOrgPreferCountry("");
                     }}
                     className={`rounded-xl border px-4 py-3 text-left transition ${
                       affiliation === value
@@ -183,17 +186,25 @@ export default function OnboardingPage() {
               </div>
               {needsTraps && (
                 <>
+                  <CountrySelect
+                    tone="dark"
+                    value={orgPreferCountry}
+                    onChange={setOrgPreferCountry}
+                    label="Where is this org based? (optional — improves suggestions)"
+                  />
                   <label className="block text-[13px] text-[#8a9a92]">
                     {affiliation === "university"
                       ? "University name"
                       : affiliation === "institution"
                         ? "Institute name"
                         : "Organization name"}
-                    <input
-                      className="mt-1 w-full"
+                    <InstitutionAutocomplete
+                      tone="dark"
                       value={organization}
                       required
-                      onChange={(e) => setOrganization(e.target.value)}
+                      affiliation={affiliation}
+                      preferCountry={orgPreferCountry}
+                      onChange={setOrganization}
                       placeholder={
                         affiliation === "university"
                           ? "e.g. Universidad de Costa Rica"

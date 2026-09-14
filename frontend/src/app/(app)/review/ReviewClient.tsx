@@ -186,7 +186,7 @@ export default function ReviewClient() {
                 <Link
                   key={row.id}
                   href={`/observations/${row.id}`}
-                  className="surface flex gap-3 overflow-hidden p-3 transition hover:bg-canvas/70 sm:gap-4 sm:p-4"
+                  className="surface flex gap-3 overflow-hidden p-3 text-ink transition hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:outline-none sm:gap-4 sm:p-4"
                 >
                   <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-ink/5 sm:h-24 sm:w-28">
                     {thumb ? (

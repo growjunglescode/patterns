@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type User } from "@/lib/api";
 import { CountryCityFields, CountrySelect } from "@/components/CountryCityFields";
+import { InstitutionAutocomplete } from "@/components/InstitutionAutocomplete";
 import { roleLabel } from "@/lib/roles";
 
 type Affiliation = "university" | "institution" | "organization" | "hobby" | "";
@@ -163,23 +164,12 @@ export default function ProfileSettingsPage() {
             ))}
           </div>
         </fieldset>
-        {showOrgName && (
-          <label className="block text-[13px]">
-            {orgCopy.label}
-            <input
-              className="mt-1 w-full"
-              value={organization}
-              onChange={(e) => setOrganization(e.target.value)}
-              placeholder={orgCopy.placeholder}
-            />
-          </label>
-        )}
         <CountryCityFields
           country={country}
           city={city}
           onCountry={setCountry}
           onCity={setCity}
-          countryLabel="Country"
+          countryLabel="Country where you are based"
           cityLabel="City"
         />
         <div className="grid gap-4 sm:grid-cols-2">
@@ -193,6 +183,18 @@ export default function ProfileSettingsPage() {
             label="Camera trap country"
           />
         </div>
+        {showOrgName && (
+          <label className="block text-[13px]">
+            {orgCopy.label}
+            <InstitutionAutocomplete
+              value={organization}
+              onChange={setOrganization}
+              affiliation={affiliation || undefined}
+              preferCountry={studyCountry || country}
+              placeholder={orgCopy.placeholder}
+            />
+          </label>
+        )}
         <label className="block text-[13px]">
           Study area / region
           <input className="mt-1" value={studyRegion} onChange={(e) => setStudyRegion(e.target.value)} />

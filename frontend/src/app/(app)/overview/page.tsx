@@ -104,7 +104,7 @@ export default function OverviewPage() {
             <Link
               key={row.id}
               href={`/observations/${row.id}`}
-              className="flex items-center justify-between px-5 py-3.5 transition hover:bg-canvas/70"
+              className="flex items-center justify-between px-5 py-3.5 text-ink transition hover:bg-white/[0.05] active:bg-white/[0.08] focus-visible:bg-white/[0.08] focus-visible:outline-none"
             >
               <div>
                 <p className="text-[0.95rem]">

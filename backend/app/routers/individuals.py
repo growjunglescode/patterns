@@ -11,7 +11,7 @@ from app.models import CoatEmbedding, Detection, Follow, Individual, NamingClaim
 from app.schemas import ClaimDecision, IndividualOut, MergeIndividualsRequest, NameRequest, NamingClaimOut, SharePatch
 from app.services.identity import assert_name_free, audit, name_key
 from app.services.monitoring import monitoring_map
-from app.services.serialize import claim_out, individual_out
+from app.services.serialize import claim_out, individual_media_stats, individual_out
 
 router = APIRouter(prefix="/api", tags=["individuals"])
 
@@ -28,8 +28,10 @@ def list_individuals(
     if project_id:
         stmt = stmt.where(Individual.project_id == project_id)
     rows = db.scalars(stmt).all()
-    stats = monitoring_map(db, [row.id for row in rows])
-    results = [individual_out(db, row, stats.get(row.id)) for row in rows]
+    ids = [row.id for row in rows]
+    stats = monitoring_map(db, ids)
+    media = individual_media_stats(db, ids)
+    results = [individual_out(db, row, stats.get(row.id), media.get(row.id)) for row in rows]
     if q:
         needle = q.casefold()
         results = [row for row in results if needle in row.display_name.casefold() or needle in row.code.casefold()]

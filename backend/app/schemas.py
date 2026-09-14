@@ -188,6 +188,8 @@ class IndividualOut(BaseModel):
     sighting_count: int = 0
     active_last_90_days: bool = False
     movement: MovementSummaryOut | None = None
+    photo_url: str | None = None
+    photo_count: int = 0
     # Editable field details
     age_class: str | None = None
     birth_year_estimate: int | None = None

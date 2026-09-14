@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.roles import canonical_role
@@ -73,12 +74,51 @@ def _project_country(project) -> str | None:
     return region
 
 
+def individual_media_stats(db: Session, individual_ids: list[str]) -> dict[str, dict]:
+    """Cover photo + picture count per individual (batched for catalog cards)."""
+    if not individual_ids:
+        return {}
+    rows = db.execute(
+        select(
+            Detection.individual_id,
+            Media.storage_key,
+            Media.is_best_frame,
+            Detection.captured_at,
+            Detection.created_at,
+        )
+        .join(Media, Media.detection_id == Detection.id)
+        .where(
+            Detection.individual_id.in_(individual_ids),
+            Media.kind != "video",
+        )
+        .order_by(
+            Detection.individual_id,
+            Media.is_best_frame.desc(),
+            Detection.captured_at.desc().nullslast(),
+            Detection.created_at.desc(),
+        )
+    ).all()
+
+    storage = get_storage()
+    out: dict[str, dict] = {iid: {"photo_url": None, "photo_count": 0} for iid in individual_ids}
+    for individual_id, storage_key, _is_best, _captured, _created in rows:
+        if not individual_id:
+            continue
+        bucket = out.setdefault(individual_id, {"photo_url": None, "photo_count": 0})
+        bucket["photo_count"] = int(bucket["photo_count"]) + 1
+        if not bucket["photo_url"] and storage_key:
+            bucket["photo_url"] = storage.public_url(storage_key)
+    return out
+
+
 def individual_out(
     db: Session,
     individual: Individual,
     monitoring: dict | None = None,
+    media: dict | None = None,
 ) -> IndividualOut:
     stats = monitoring if monitoring is not None else individual_monitoring(db, individual.id)
+    media_stats = media if media is not None else individual_media_stats(db, [individual.id]).get(individual.id, {})
     editor_id = getattr(individual, "details_updated_by_id", None)
     editor = db.get(User, editor_id) if editor_id else None
     project = individual.project
@@ -106,6 +146,8 @@ def individual_out(
         sighting_count=stats.get("sighting_count", 0),
         active_last_90_days=bool(stats.get("active_last_90_days")),
         movement=MovementSummaryOut(**stats["movement"]) if stats.get("movement") else None,
+        photo_url=media_stats.get("photo_url"),
+        photo_count=int(media_stats.get("photo_count") or 0),
         age_class=getattr(individual, "age_class", None),
         birth_year_estimate=getattr(individual, "birth_year_estimate", None),
         physical_notes=getattr(individual, "physical_notes", None),

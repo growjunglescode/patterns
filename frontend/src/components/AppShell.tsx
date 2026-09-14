@@ -190,12 +190,6 @@ function AppShellChrome({
   const visibleProjects = orgFilter
     ? projects.filter((p) => (p.organization_id || p.organization_name) === orgFilter)
     : projects;
-  const current = visibleProjects.find((p) => p.id === projectId) || projects.find((p) => p.id === projectId);
-  const projectLabel = current
-    ? current.organization_name
-      ? `${current.organization_name} · ${current.name}`
-      : current.name
-    : "Patterns";
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] overflow-hidden bg-[var(--canvas)] text-[var(--ink)]">
@@ -275,6 +269,26 @@ function AppShellChrome({
               <p className="text-[11px] text-white/45">{roleLabel(effectiveRole)}</p>
             </div>
           </Link>
+          <p className="mt-2 px-3 pb-1 text-[10px] leading-snug text-white/35">
+            Brought to you by{" "}
+            <a
+              href="https://growjungles.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#c4a35a]/90 underline-offset-2 hover:text-[#c4a35a] hover:underline"
+            >
+              GrowJungles
+            </a>
+            {" & "}
+            <a
+              href="https://www.lasoncas.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#c4a35a]/90 underline-offset-2 hover:text-[#c4a35a] hover:underline"
+            >
+              Las Oncas
+            </a>
+          </p>
         </div>
       </aside>
 
@@ -316,14 +330,14 @@ function AppShellChrome({
                 ))}
               </select>
             )}
-            {visibleProjects.length > 1 ? (
+            {visibleProjects.length > 1 && (
               <select
                 value={projectId}
                 onChange={(e) => {
                   writeProjectId(e.target.value);
                   setProjectId(e.target.value);
                 }}
-                className="min-w-0 max-w-full flex-1 !rounded-md !border-0 !bg-transparent !px-0 !py-0 text-[11px] uppercase tracking-[0.1em] text-[#8a9a92] sm:text-[12.5px] sm:tracking-[0.12em]"
+                className="min-w-0 max-w-[9rem] shrink !rounded-md !border-0 !bg-transparent !px-0 !py-0 text-[11px] uppercase tracking-[0.1em] text-[#8a9a92] sm:max-w-[14rem] sm:text-[12.5px] sm:tracking-[0.12em]"
               >
                 {visibleProjects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -331,20 +345,37 @@ function AppShellChrome({
                   </option>
                 ))}
               </select>
-            ) : (
-              <p className="truncate text-[11px] uppercase tracking-[0.1em] text-[#8a9a92] sm:text-[12.5px] sm:tracking-[0.12em]">
-                {projectLabel}
-              </p>
             )}
+            <p className="min-w-0 truncate text-[9px] leading-snug text-[#8a9a92] sm:text-[11px]">
+              <span className="sm:hidden">By </span>
+              <span className="hidden sm:inline">Brought to you by </span>
+              <a
+                href="https://growjungles.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-[#c4a35a] underline-offset-2 hover:underline"
+              >
+                GrowJungles
+              </a>
+              {" & "}
+              <a
+                href="https://www.lasoncas.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-[#c4a35a] underline-offset-2 hover:underline"
+              >
+                Las Oncas
+              </a>
+            </p>
           </div>
-          <div className="relative flex shrink-0 items-center gap-2">
+          <div className="relative z-20 flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <RoleViewSwitcher compact />
             {nav.collect.length > 0 && (
-              <Link href="/upload" className="btn-gold !min-h-10 !px-3 !py-2 sm:!px-4">
+              <Link href="/upload" className="btn-gold !min-h-10 !px-2.5 !py-2 sm:!px-4">
                 <span className="sm:hidden">Upload</span>
                 <span className="hidden sm:inline">Upload</span>
               </Link>
             )}
-            <RoleViewSwitcher />
             {!isActualAdmin && (
               <span className="hidden rounded-md border border-[#2a3832] bg-[#18211d] px-3 py-1 text-[11px] font-semibold text-[#e6ede8] sm:inline">
                 {roleLabel(effectiveRole)}

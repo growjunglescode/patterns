@@ -71,17 +71,25 @@ export function useRoleView() {
   return ctx;
 }
 
-export function RoleViewSwitcher() {
+export function RoleViewSwitcher({ compact = false }: { compact?: boolean }) {
   const { isActualAdmin, viewRole, setViewRole } = useRoleView();
   if (!isActualAdmin) return null;
+
   return (
-    <label className="flex items-center gap-2">
-      <span className="hidden text-[10px] uppercase tracking-[0.12em] text-[#8a9a92] sm:inline">View as</span>
+    <label
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border border-[#2a3832] bg-[#0c1210] ${
+        compact ? "min-h-10 px-2 py-1" : "min-h-10 px-2.5 py-1.5 sm:gap-2 sm:px-3"
+      }`}
+    >
+      <span className="hidden text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8a9a92] sm:inline">
+        View as
+      </span>
+      <span className="text-[9px] font-semibold uppercase tracking-[0.14em] text-[#8a9a92] sm:hidden">View</span>
       <select
         value={viewRole}
         onChange={(e) => setViewRole(e.target.value as AccountRole)}
-        className="!min-h-9 max-w-[9.5rem] !rounded-md !border !border-[#2a3832] !bg-[#0c1210] !px-2 !py-1.5 text-[11px] font-semibold text-[#e6ede8] sm:max-w-none"
-        aria-label="View app as role"
+        aria-label="View app as RBAC role"
+        className="!m-0 !min-h-0 !w-auto !min-w-[6.5rem] !max-w-[9.5rem] !rounded-none !border-0 !bg-transparent !px-0 !py-0 !text-[11px] !font-semibold !text-[#e6ede8] !shadow-none !outline-none focus:!shadow-none sm:!min-w-[8.5rem] sm:!max-w-none sm:!text-[12px]"
       >
         {ROLE_OPTIONS.map((role) => (
           <option key={role} value={role}>

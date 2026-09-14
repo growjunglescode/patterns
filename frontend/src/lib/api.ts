@@ -122,12 +122,15 @@ export type Individual = {
   country?: string | null;
   region?: string | null;
   share_public?: boolean;
+  created_at?: string;
   first_seen?: string | null;
   last_seen?: string | null;
   days_since_seen?: number | null;
   sighting_count?: number;
   active_last_90_days?: boolean;
   movement?: MovementSummary | null;
+  photo_url?: string | null;
+  photo_count?: number;
   age_class?: string | null;
   birth_year_estimate?: number | null;
   physical_notes?: string | null;
@@ -275,12 +278,14 @@ export const api = {
   patchMe: (body: object) => request<User>("/api/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
   completeOnboarding: (body: object) =>
     request<User>("/api/auth/onboarding", { method: "POST", body: JSON.stringify(body) }),
-  searchInstitutions: (q: string, affiliation?: string) => {
+  searchInstitutions: (q: string, affiliation?: string, country?: string) => {
     const p = new URLSearchParams();
     p.set("q", q);
     if (affiliation) p.set("affiliation", affiliation);
+    if (country) p.set("country", country);
     return request<{
       query: string;
+      prefer_country?: string | null;
       results: {
         id?: string | null;
         name: string;
@@ -288,6 +293,7 @@ export const api = {
         city?: string | null;
         types?: string[];
         acronyms?: string[];
+        source?: string;
       }[];
     }>(`/api/institutions/search?${p.toString()}`);
   },
