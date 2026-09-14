@@ -118,6 +118,7 @@ export type Individual = {
   life_status: string;
   identity_status: string;
   detection_count: number;
+  project_id?: string;
   project_name: string | null;
   country?: string | null;
   region?: string | null;
