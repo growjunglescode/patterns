@@ -607,4 +607,8 @@ def delete_detection(
 @router.get("/media/{key:path}")
 def get_media(key: str) -> Response:
     data = get_storage().read(key)
-    return Response(content=data, media_type=guess_content_type(key))
+    return Response(
+        content=data,
+        media_type=guess_content_type(key),
+        headers={"Cache-Control": "public, max-age=86400"},
+    )

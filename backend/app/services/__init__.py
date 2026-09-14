@@ -66,8 +66,10 @@ class AzureBlobStorage(Storage):
         return key
 
     def public_url(self, key: str) -> str:
-        blob = self.client.get_blob_client(self.container, key)
-        return blob.url
+        # Always go through the API media route. Direct blob URLs are private by
+        # default on Azure, so <img src="https://….blob.core.windows.net/…"> breaks
+        # on phones even when upload succeeded.
+        return f"/api/media/{key}"
 
     def read(self, key: str) -> bytes:
         blob = self.client.get_blob_client(self.container, key)

@@ -235,10 +235,17 @@ export default function UploadPage() {
 
       {obs && (
         <div className="space-y-5">
-          {obs.media.filter((m) => m.kind !== "video").map((m) => (
+          {localPreview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={m.id} src={mediaSrc(m.url)} alt="" className="w-full rounded-xl bg-white shadow-card" />
-          ))}
+            <img src={localPreview} alt="" className="w-full rounded-xl bg-white object-contain shadow-card" />
+          ) : (
+            obs.media
+              .filter((m) => m.kind !== "video")
+              .map((m) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={m.id} src={mediaSrc(m.url)} alt="" className="w-full rounded-xl bg-white shadow-card" />
+              ))
+          )}
 
           <div className="rounded-xl bg-white p-5 shadow-card text-[0.9375rem]">
               <div className="mb-2 flex flex-wrap items-center gap-2">
