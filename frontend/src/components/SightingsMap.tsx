@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { mediaSrc } from "@/lib/api";
+import "leaflet/dist/leaflet.css";
 
 export type MapPoint = {
   lat: number;
@@ -14,74 +15,6 @@ export type MapPoint = {
   location?: string | null;
   station_code?: string | null;
 };
-
-type TileConfig = {
-  url: string;
-  attribution: string;
-  maxZoom: number;
-  subdomains?: string;
-};
-
-/** Key-free basemaps. CARTO raster is avoided — it watermarks without a valid basemap key. */
-function basemapCandidates(dark: boolean): TileConfig[] {
-  if (dark) {
-    return [
-      {
-        url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
-        attribution: "Tiles &copy; Esri",
-        maxZoom: 16,
-      },
-      {
-        url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      },
-    ];
-  }
-  return [
-    {
-      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
-    },
-    {
-      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-      attribution: "Tiles &copy; Esri &mdash; Source: Esri, OpenStreetMap contributors",
-      maxZoom: 19,
-    },
-  ];
-}
-
-function attachBasemap(L: any, map: any, dark: boolean) {
-  const candidates = basemapCandidates(dark);
-  let layer: any = null;
-
-  const mount = (i: number) => {
-    const cfg = candidates[i];
-    if (!cfg) return;
-    if (layer) map.removeLayer(layer);
-    layer = L.tileLayer(cfg.url, {
-      attribution: cfg.attribution,
-      maxZoom: cfg.maxZoom,
-      subdomains: cfg.subdomains,
-      crossOrigin: true,
-    });
-    let failed = 0;
-    layer.on("tileerror", () => {
-      failed += 1;
-      if (failed >= 3 && i + 1 < candidates.length) {
-        mount(i + 1);
-      }
-    });
-    layer.addTo(map);
-    layer.bringToBack?.();
-  };
-
-  mount(0);
-  return () => {
-    if (layer) map.removeLayer(layer);
-  };
-}
 
 function escapeHtml(value: string) {
   return value
@@ -141,46 +74,59 @@ function spreadPoints(points: MapPoint[]): MapPoint[] {
   });
 }
 
+async function loadLeaflet() {
+  const mod = await import("leaflet");
+  return (mod as { default?: typeof import("leaflet") }).default ?? mod;
+}
+
+/**
+ * Fixed OSM endpoint — no `{s}` / subdomains option.
+ * Passing `subdomains: undefined` crashes Leaflet with
+ * "Cannot read properties of undefined (reading 'length')".
+ */
+const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_ATTR =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
 export function SightingsMap({
   points,
   track = [],
   height = 420,
+  pickable = false,
+  pin = null,
+  onPick,
+  pickHint = "Click the map to place the jaguar pin",
 }: {
-  points: MapPoint[];
+  points?: MapPoint[];
   track?: MapPoint[];
   height?: number;
+  pickable?: boolean;
+  pin?: { lat: number; lng: number } | null;
+  onPick?: (lat: number, lng: number) => void;
+  pickHint?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const layerRef = useRef<any>(null);
-  const detachBasemapRef = useRef<(() => void) | null>(null);
+  const mapRef = useRef<import("leaflet").Map | null>(null);
+  const markersRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const pinLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const onPickRef = useRef(onPick);
   const [mapHeight, setMapHeight] = useState(height);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
 
-  const dark = typeof document !== "undefined" && Boolean(document.querySelector(".ops"));
-  const plotted = useMemo(() => spreadPoints(points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))), [points]);
-  const plottedTrack = useMemo(
-    () => track.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng)),
-    [track],
-  );
-  const signature = useMemo(
-    () =>
-      JSON.stringify({
-        points: plotted.map((p) => [
-          p.lat,
-          p.lng,
-          p.label,
-          p.captured_at || "",
-          p.href || "",
-          p.photo_url || "",
-          p.location || "",
-        ]),
-        track: plottedTrack.map((p) => [p.lat, p.lng]),
-        dark,
-      }),
-    [plotted, plottedTrack, dark],
-  );
+  onPickRef.current = onPick;
+
+  const dark =
+    typeof document !== "undefined" && Boolean(document.querySelector(".ops"));
+  const plotted = useMemo(() => {
+    const list = Array.isArray(points) ? points : [];
+    return spreadPoints(list.filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng)));
+  }, [points]);
+  const plottedTrack = useMemo(() => {
+    const list = Array.isArray(track) ? track : [];
+    return list.filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng));
+  }, [track]);
+  const pinValid = pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) ? pin : null;
 
   useEffect(() => {
     function sync() {
@@ -191,123 +137,184 @@ export function SightingsMap({
     return () => window.removeEventListener("resize", sync);
   }, [height]);
 
+  // Create map once
   useEffect(() => {
     let cancelled = false;
     let resizeObserver: ResizeObserver | null = null;
+    let map: import("leaflet").Map | null = null;
 
     (async () => {
       try {
-        const L = (await import("leaflet")).default;
-        if (cancelled || !containerRef.current) return;
-        if (mapRef.current) return;
+        const L = await loadLeaflet();
+        const el = containerRef.current;
+        if (cancelled || !el) return;
 
-        const map = L.map(containerRef.current, {
+        // React Strict Mode remount: clear stale Leaflet state on the DOM node
+        if ((el as HTMLElement & { _leaflet_id?: number })._leaflet_id) {
+          try {
+            mapRef.current?.remove();
+          } catch {
+            /* ignore */
+          }
+          delete (el as HTMLElement & { _leaflet_id?: number })._leaflet_id;
+          el.innerHTML = "";
+        }
+
+        map = L.map(el, {
           zoomControl: true,
           attributionControl: true,
         }).setView([9.63, -84.0], 8);
 
-        detachBasemapRef.current = attachBasemap(L, map, dark);
-        layerRef.current = L.layerGroup().addTo(map);
+        // Never pass a subdomains option — omit entirely
+        L.tileLayer(OSM_TILE_URL, {
+          attribution: OSM_ATTR,
+          maxZoom: 19,
+        }).addTo(map);
+
+        markersRef.current = L.layerGroup().addTo(map);
+        pinLayerRef.current = L.layerGroup().addTo(map);
         mapRef.current = map;
-        setReady(true);
-        setError("");
+        if (!cancelled) {
+          setReady(true);
+          setError("");
+        }
 
         resizeObserver = new ResizeObserver(() => {
-          map.invalidateSize();
+          map?.invalidateSize();
         });
-        resizeObserver.observe(containerRef.current);
-        setTimeout(() => map.invalidateSize(), 80);
-        setTimeout(() => map.invalidateSize(), 400);
+        resizeObserver.observe(el);
+        requestAnimationFrame(() => map?.invalidateSize());
+        setTimeout(() => map?.invalidateSize(), 200);
+        setTimeout(() => map?.invalidateSize(), 600);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Map failed to load");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Map failed to load");
       }
     })();
 
     return () => {
       cancelled = true;
       resizeObserver?.disconnect();
-      detachBasemapRef.current?.();
-      detachBasemapRef.current = null;
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        layerRef.current = null;
+      try {
+        map?.remove();
+      } catch {
+        /* ignore */
       }
-      setReady(false);
+      try {
+        mapRef.current?.remove();
+      } catch {
+        /* ignore */
+      }
+      mapRef.current = null;
+      markersRef.current = null;
+      pinLayerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Dark ops theme: invert OSM tiles instead of swapping providers
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.classList.toggle("sightings-map--dark", dark);
+  }, [dark, ready]);
+
+  // Click-to-pin
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    let cancelled = false;
-    (async () => {
-      const L = (await import("leaflet")).default;
-      if (cancelled || !mapRef.current) return;
-      detachBasemapRef.current?.();
-      detachBasemapRef.current = attachBasemap(L, map, dark);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [dark, ready]);
 
+    const onClick = (e: { latlng: { lat: number; lng: number } }) => {
+      if (!pickable || !onPickRef.current) return;
+      onPickRef.current(Number(e.latlng.lat.toFixed(6)), Number(e.latlng.lng.toFixed(6)));
+    };
+    map.on("click", onClick);
+    const container = map.getContainer();
+    container.style.cursor = pickable ? "crosshair" : "";
+    return () => {
+      map.off("click", onClick);
+      container.style.cursor = "";
+    };
+  }, [pickable, ready]);
+
+  // Draw markers / track / pin
   useEffect(() => {
     const map = mapRef.current;
-    const group = layerRef.current;
+    const group = markersRef.current;
+    const pinGroup = pinLayerRef.current;
     if (!map || !group || !ready) return;
 
     let cancelled = false;
     (async () => {
-      const L = (await import("leaflet")).default;
-      if (cancelled || !mapRef.current || !layerRef.current) return;
+      try {
+        const L = await loadLeaflet();
+        if (cancelled || !mapRef.current || !markersRef.current) return;
 
-      group.clearLayers();
+        group.clearLayers();
+        pinGroup?.clearLayers();
 
-      for (const point of plotted) {
-        const marker = L.circleMarker([point.lat, point.lng], {
-          radius: point.kind === "station" ? 9 : 7,
-          color: "#c4a35a",
-          weight: 1.5,
-          fillColor: dark ? "#c4a35a" : point.kind === "station" ? "#1f6b52" : "#0c2b21",
-          fillOpacity: 0.92,
-        });
-        marker.bindPopup(popupHtml(point), {
-          maxWidth: 260,
-          minWidth: 200,
-          className: "map-popup-wrap",
-          autoPanPadding: [24, 24],
-        });
-        group.addLayer(marker);
+        for (const point of plotted) {
+          const marker = L.circleMarker([point.lat, point.lng], {
+            radius: point.kind === "station" ? 9 : 7,
+            color: "#c4a35a",
+            weight: 1.5,
+            fillColor: dark ? "#c4a35a" : point.kind === "station" ? "#1f6b52" : "#0c2b21",
+            fillOpacity: 0.92,
+          });
+          marker.bindPopup(popupHtml(point), {
+            maxWidth: 260,
+            minWidth: 200,
+            className: "map-popup-wrap",
+            autoPanPadding: [24, 24],
+          });
+          group.addLayer(marker);
+        }
+
+        if (plottedTrack.length > 1) {
+          group.addLayer(
+            L.polyline(
+              plottedTrack.map((p) => [p.lat, p.lng] as [number, number]),
+              { color: "#c4a35a", dashArray: "2 10", weight: 2.4 },
+            ),
+          );
+        }
+
+        if (pinValid && pinGroup) {
+          const pinMarker = L.circleMarker([pinValid.lat, pinValid.lng], {
+            radius: 10,
+            color: "#f0e6d2",
+            weight: 2.5,
+            fillColor: "#c45a3a",
+            fillOpacity: 0.95,
+          });
+          pinMarker.bindPopup(
+            `<div class="map-popup"><div class="map-popup-body"><p class="map-popup-name">Pinned location</p><p class="map-popup-coords">${pinValid.lat.toFixed(5)}, ${pinValid.lng.toFixed(5)}</p></div></div>`,
+            { className: "map-popup-wrap" },
+          );
+          pinGroup.addLayer(pinMarker);
+        }
+
+        const focus: [number, number][] = [
+          ...plotted.map((p) => [p.lat, p.lng] as [number, number]),
+          ...(pinValid ? [[pinValid.lat, pinValid.lng] as [number, number]] : []),
+        ];
+
+        if (focus.length === 1) {
+          map.setView(focus[0], pickable ? 12 : 11);
+        } else if (focus.length > 1) {
+          map.fitBounds(L.latLngBounds(focus), { padding: [36, 36], maxZoom: pickable ? 14 : 12 });
+        } else {
+          map.setView([9.63, -84.0], 8);
+        }
+        map.invalidateSize();
+        setError("");
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Map failed to update");
       }
-
-      if (plottedTrack.length > 1) {
-        group.addLayer(
-          L.polyline(
-            plottedTrack.map((p) => [p.lat, p.lng] as [number, number]),
-            { color: "#c4a35a", dashArray: "2 10", weight: 2.4 },
-          ),
-        );
-      }
-
-      if (plotted.length === 1) {
-        map.setView([plotted[0].lat, plotted[0].lng], 11);
-      } else if (plotted.length > 1) {
-        map.fitBounds(
-          plotted.map((p) => [p.lat, p.lng] as [number, number]),
-          { padding: [36, 36], maxZoom: 12 },
-        );
-      } else {
-        map.setView([9.63, -84.0], 8);
-      }
-      setTimeout(() => map.invalidateSize(), 40);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [signature, ready, plotted, plottedTrack, dark]);
+  }, [ready, plotted, plottedTrack, dark, pinValid, pickable]);
 
   useEffect(() => {
     mapRef.current?.invalidateSize();
@@ -315,10 +322,19 @@ export function SightingsMap({
 
   return (
     <div className="relative overflow-hidden rounded-[10px] border border-[var(--line)] bg-[var(--paper)]">
-      <div ref={containerRef} className="z-0" style={{ height: mapHeight, width: "100%", minHeight: 240 }} />
-      {!plotted.length && !error && (
-        <div className="pointer-events-none absolute inset-0 z-[400] flex items-center justify-center bg-[var(--paper)]/70 px-6 text-center text-[13px] text-[var(--muted)]">
-          No geotagged sightings yet. Confirm GPS or a camera station on an observation to pin it here.
+      <div
+        ref={containerRef}
+        className="sightings-map z-0"
+        style={{ height: mapHeight, width: "100%", minHeight: 240 }}
+      />
+      {pickable && (
+        <div className="pointer-events-none absolute left-3 top-3 z-[450] rounded-md bg-[#0d1210]/90 px-2.5 py-1.5 text-[12px] text-[#f0e6d2] shadow">
+          {pinValid ? "Click again to move the pin" : pickHint}
+        </div>
+      )}
+      {!pickable && !plotted.length && !error && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[400] bg-[var(--paper)]/90 px-4 py-3 text-center text-[13px] text-[var(--muted)]">
+          Map is ready. No geotagged pins in this view yet — upload with GPS or pin a location after analysis.
         </div>
       )}
       {error && (
