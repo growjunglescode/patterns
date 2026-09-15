@@ -79,6 +79,10 @@ async function loadLeaflet() {
   return (mod as { default?: typeof import("leaflet") }).default ?? mod;
 }
 
+/** Geographic home for empty maps — Costa Rica. */
+export const COSTA_RICA_CENTER: [number, number] = [9.7489, -83.7534];
+export const COSTA_RICA_ZOOM = 8;
+
 /**
  * Fixed OSM endpoint — no `{s}` / subdomains option.
  * Passing `subdomains: undefined` crashes Leaflet with
@@ -87,6 +91,13 @@ async function loadLeaflet() {
 const OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 const OSM_ATTR =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
+function isPlottedCoord(lat: number, lng: number) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  // Onboarding placeholders land at 0,0 — never treat as a real pin
+  if (Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01) return false;
+  return true;
+}
 
 export function SightingsMap({
   points,
@@ -120,13 +131,13 @@ export function SightingsMap({
     typeof document !== "undefined" && Boolean(document.querySelector(".ops"));
   const plotted = useMemo(() => {
     const list = Array.isArray(points) ? points : [];
-    return spreadPoints(list.filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng)));
+    return spreadPoints(list.filter((p) => isPlottedCoord(p?.lat, p?.lng)));
   }, [points]);
   const plottedTrack = useMemo(() => {
     const list = Array.isArray(track) ? track : [];
-    return list.filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng));
+    return list.filter((p) => isPlottedCoord(p?.lat, p?.lng));
   }, [track]);
-  const pinValid = pin && Number.isFinite(pin.lat) && Number.isFinite(pin.lng) ? pin : null;
+  const pinValid = pin && isPlottedCoord(pin.lat, pin.lng) ? pin : null;
 
   useEffect(() => {
     function sync() {
@@ -163,7 +174,8 @@ export function SightingsMap({
         map = L.map(el, {
           zoomControl: true,
           attributionControl: true,
-        }).setView([9.63, -84.0], 8);
+          worldCopyJump: true,
+        }).setView(COSTA_RICA_CENTER, COSTA_RICA_ZOOM);
 
         // Never pass a subdomains option — omit entirely
         L.tileLayer(OSM_TILE_URL, {
@@ -302,7 +314,8 @@ export function SightingsMap({
         } else if (focus.length > 1) {
           map.fitBounds(L.latLngBounds(focus), { padding: [36, 36], maxZoom: pickable ? 14 : 12 });
         } else {
-          map.setView([9.63, -84.0], 8);
+          // Always home empty maps on Costa Rica
+          map.setView(COSTA_RICA_CENTER, COSTA_RICA_ZOOM);
         }
         map.invalidateSize();
         setError("");
@@ -334,7 +347,7 @@ export function SightingsMap({
       )}
       {!pickable && !plotted.length && !error && (
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[400] bg-[var(--paper)]/90 px-4 py-3 text-center text-[13px] text-[var(--muted)]">
-          Map is ready. No geotagged pins in this view yet — upload with GPS or pin a location after analysis.
+          Starting in Costa Rica. No geotagged pins in this view yet — use Pin camera / Pin jaguar, or upload with GPS.
         </div>
       )}
       {error && (

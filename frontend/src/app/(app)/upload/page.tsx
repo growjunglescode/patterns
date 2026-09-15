@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { api, mediaSrc, reviewStateLabel, type Detection, type Station, type User } from "@/lib/api";
 import { canName } from "@/lib/roles";
 import { readProjectId } from "@/lib/project";
@@ -12,6 +13,15 @@ import { CANDIDATE_SCORE_HELP, FLANK_HELP, InfoTip } from "@/components/InfoTip"
 import { SightingsMap } from "@/components/SightingsMap";
 
 export default function UploadPage() {
+  return (
+    <Suspense fallback={<p className="text-ink/40">Loading upload…</p>}>
+      <UploadPageInner />
+    </Suspense>
+  );
+}
+
+function UploadPageInner() {
+  const searchParams = useSearchParams();
   const [stations, setStations] = useState<Station[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState("");
@@ -28,6 +38,13 @@ export default function UploadPage() {
   const [when, setWhen] = useState("");
   const [stationId, setStationId] = useState("");
   const projectId = useProjectId();
+
+  useEffect(() => {
+    const qLat = searchParams.get("lat");
+    const qLng = searchParams.get("lng");
+    if (qLat && Number.isFinite(Number(qLat))) setLat(qLat);
+    if (qLng && Number.isFinite(Number(qLng))) setLng(qLng);
+  }, [searchParams]);
 
   useEffect(() => {
     api.stations(projectId).then(setStations).catch(() => undefined);
@@ -64,8 +81,22 @@ export default function UploadPage() {
       const result = await api.upload(form);
       setObs(result);
       setAskSpecies(Boolean(result.needs_species_confirm));
-      setLat(result.latitude != null ? String(result.latitude) : "");
-      setLng(result.longitude != null ? String(result.longitude) : "");
+      const pinnedLat = searchParams.get("lat");
+      const pinnedLng = searchParams.get("lng");
+      setLat(
+        result.latitude != null
+          ? String(result.latitude)
+          : pinnedLat && Number.isFinite(Number(pinnedLat))
+            ? pinnedLat
+            : "",
+      );
+      setLng(
+        result.longitude != null
+          ? String(result.longitude)
+          : pinnedLng && Number.isFinite(Number(pinnedLng))
+            ? pinnedLng
+            : "",
+      );
       setWhen(result.captured_at ? result.captured_at.slice(0, 16) : "");
       setScanning(false);
     } catch (err) {

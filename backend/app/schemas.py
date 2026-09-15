@@ -43,6 +43,9 @@ class UserOut(BaseModel):
     study_region: str | None = None
     onboarding_complete: bool = False
     home_project_id: str | None = None
+    # Licensed entity seats (org admin ≠ platform admin)
+    org_memberships: list[dict] = Field(default_factory=list)
+    is_org_admin: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -121,6 +124,15 @@ class StationOut(BaseModel):
     detection_count: int = 0
 
     model_config = {"from_attributes": True}
+
+
+class StationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    code: str | None = Field(default=None, max_length=32)
+    latitude: float
+    longitude: float
+    project_id: str | None = None
+    camera_model: str | None = Field(default=None, max_length=80)
 
 
 class MovementSummaryOut(BaseModel):

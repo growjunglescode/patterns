@@ -10,23 +10,26 @@ from app.auth import get_current_user, require_roles
 from app.roles import canonical_role
 from app.db import get_db
 from app.models import CameraStation, Detection, Follow, Individual, NamingClaim, Organization, Project, User
-from app.schemas import ProjectOut, StationOut, UserAdminPatch, UserOut
+from app.schemas import ProjectOut, StationCreate, StationOut, UserAdminPatch, UserOut
 from app.services import get_storage
 from app.services.identity import generalize
 from app.services.onboarding import resolve_user_project
 from app.services.serialize import claim_out, detection_out, individual_out, user_out
+from app.org_policy import (
+    accessible_project_ids,
+    apply_project_scope,
+    require_project_access,
+)
 
 router = APIRouter(prefix="/api", tags=["workspace"])
 
 
 def _resolve_project(db: Session, project_id: str | None, user: User | None = None) -> Project | None:
-    if project_id:
-        project = db.get(Project, project_id)
-        if project:
-            return project
-    if user is not None:
-        return resolve_user_project(db, user)
-    return db.scalar(select(Project).where(Project.active.is_(True)).order_by(Project.created_at.asc()).limit(1))
+    if user is None:
+        if project_id:
+            return db.get(Project, project_id)
+        return db.scalar(select(Project).where(Project.active.is_(True)).order_by(Project.created_at.asc()).limit(1))
+    return resolve_user_project(db, user, project_id)
 
 
 def _org_name(db: Session, project: Project | None) -> str | None:
@@ -43,6 +46,10 @@ def overview(
     user: User = Depends(get_current_user),
 ) -> dict:
     project = _resolve_project(db, project_id, user)
+    scope_id = project.id if project else None
+    # If user has no accessible project, still scope to empty set (not global).
+    force_empty = project is None and accessible_project_ids(db, user) is not None
+
     individual_count_stmt = select(func.count()).select_from(Individual)
     review_stmt = select(func.count()).select_from(Detection).where(Detection.grade == "needs_id")
     recent_stmt = (
@@ -57,20 +64,43 @@ def overview(
         .order_by(Detection.created_at.desc())
         .limit(8)
     )
-    if project:
-        individual_count_stmt = individual_count_stmt.where(Individual.project_id == project.id)
-        review_stmt = review_stmt.where(Detection.project_id == project.id)
-        recent_stmt = recent_stmt.where(Detection.project_id == project.id)
+    ind_rows_stmt = select(Individual)
+    if force_empty:
+        individual_count_stmt = individual_count_stmt.where(Individual.project_id.in_([]))
+        review_stmt = review_stmt.where(Detection.project_id.in_([]))
+        recent_stmt = recent_stmt.where(Detection.project_id.in_([]))
+        ind_rows_stmt = ind_rows_stmt.where(Individual.project_id.in_([]))
+    elif scope_id:
+        individual_count_stmt = individual_count_stmt.where(Individual.project_id == scope_id)
+        review_stmt = review_stmt.where(Detection.project_id == scope_id)
+        recent_stmt = recent_stmt.where(Detection.project_id == scope_id)
+        ind_rows_stmt = ind_rows_stmt.where(Individual.project_id == scope_id)
+    else:
+        # Platform admin with no project selected — keep global view
+        pass
+
     individuals = db.scalar(individual_count_stmt) or 0
     tracking = db.scalar(select(func.count()).select_from(Follow).where(Follow.user_id == user.id)) or 0
-    pending = db.scalar(select(func.count()).select_from(NamingClaim).where(NamingClaim.status == "pending")) or 0
+    pending_stmt = select(func.count()).select_from(NamingClaim).where(NamingClaim.status == "pending")
+    # Pending names: scope via individual.project_id when possible
+    if force_empty:
+        pending = 0
+    elif scope_id:
+        pending = (
+            db.scalar(
+                select(func.count())
+                .select_from(NamingClaim)
+                .join(Individual, Individual.id == NamingClaim.individual_id)
+                .where(NamingClaim.status == "pending", Individual.project_id == scope_id)
+            )
+            or 0
+        )
+    else:
+        pending = db.scalar(pending_stmt) or 0
     review = db.scalar(review_stmt) or 0
     cutoff = datetime.now(timezone.utc) - timedelta(days=180)
     silent = 0
     unnamed_new = 0
-    ind_rows_stmt = select(Individual)
-    if project:
-        ind_rows_stmt = ind_rows_stmt.where(Individual.project_id == project.id)
     for row in db.scalars(ind_rows_stmt).all():
         last = db.scalar(
             select(func.max(Detection.captured_at)).where(Detection.individual_id == row.id)
@@ -88,12 +118,17 @@ def overview(
                 if (datetime.now(timezone.utc) - created).days <= 30:
                     unnamed_new += 1
     recent = db.scalars(recent_stmt).all()
-    claims = db.scalars(
+    claims_stmt = (
         select(NamingClaim)
         .options(selectinload(NamingClaim.individual))
         .where(NamingClaim.status == "pending")
         .order_by(NamingClaim.created_at.desc())
-    ).all()
+    )
+    claims = db.scalars(claims_stmt).all()
+    if force_empty:
+        claims = []
+    elif scope_id:
+        claims = [row for row in claims if row.individual and row.individual.project_id == scope_id]
     return {
         "project_id": project.id if project else None,
         "project_name": project.name if project else "Patterns",
@@ -111,11 +146,28 @@ def overview(
 
 @router.get("/portfolio")
 def portfolio(db: Session = Depends(get_db), user: User = Depends(require_roles("admin", "scientist"))) -> dict:
-    projects = db.scalars(select(Project)).all()
+    allowed = accessible_project_ids(db, user)
+    project_stmt = select(Project)
+    if allowed is not None:
+        if not allowed:
+            return {
+                "projects": [],
+                "totals": {"projects": 0, "active": 0, "individuals": 0, "detections": 0, "stations": 0},
+                "months": [],
+                "series": {},
+            }
+        project_stmt = project_stmt.where(Project.id.in_(allowed))
+    projects = db.scalars(project_stmt).all()
+    project_ids = {p.id for p in projects}
     cards = []
     series: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    detections = db.scalars(select(Detection).options(selectinload(Detection.project))).all()
+    det_stmt = select(Detection).options(selectinload(Detection.project))
+    if allowed is not None:
+        det_stmt = det_stmt.where(Detection.project_id.in_(project_ids))
+    detections = db.scalars(det_stmt).all()
     for det in detections:
+        if not det.project:
+            continue
         month = (det.captured_at or det.created_at).strftime("%Y-%m")
         series[det.project.name][month] += 1
     for project in projects:
@@ -134,14 +186,19 @@ def portfolio(db: Session = Depends(get_db), user: User = Depends(require_roles(
             )
         )
     months = sorted({m for by_project in series.values() for m in by_project})
+    ind_count_stmt = select(func.count()).select_from(Individual)
+    stn_count_stmt = select(func.count()).select_from(CameraStation)
+    if allowed is not None:
+        ind_count_stmt = ind_count_stmt.where(Individual.project_id.in_(project_ids))
+        stn_count_stmt = stn_count_stmt.where(CameraStation.project_id.in_(project_ids))
     return {
         "projects": [c.model_dump() for c in cards],
         "totals": {
             "projects": len(projects),
             "active": sum(1 for p in projects if p.active),
-            "individuals": db.scalar(select(func.count()).select_from(Individual)) or 0,
+            "individuals": db.scalar(ind_count_stmt) or 0,
             "detections": len(detections),
-            "stations": db.scalar(select(func.count()).select_from(CameraStation)) or 0,
+            "stations": db.scalar(stn_count_stmt) or 0,
         },
         "months": months,
         "series": {name: [series[name].get(month, 0) for month in months] for name in series},
@@ -154,11 +211,14 @@ def analytics(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("admin", "scientist")),
 ) -> dict:
-    ind_stmt = select(Individual)
-    det_stmt = select(Detection).options(selectinload(Detection.station))
-    if project_id:
-        ind_stmt = ind_stmt.where(Individual.project_id == project_id)
-        det_stmt = det_stmt.where(Detection.project_id == project_id)
+    ind_stmt = apply_project_scope(select(Individual), Individual.project_id, db, user, project_id)
+    det_stmt = apply_project_scope(
+        select(Detection).options(selectinload(Detection.station)),
+        Detection.project_id,
+        db,
+        user,
+        project_id,
+    )
     individuals = db.scalars(ind_stmt).all()
     detections = db.scalars(det_stmt).all()
     named = sum(1 for i in individuals if i.identity_status == "named")
@@ -191,11 +251,12 @@ def analytics(
         if ind:
             out = individual_out(db, ind)
             top_rows.append({**out.model_dump(), "detections": n})
+    stn_stmt = apply_project_scope(select(func.count()).select_from(CameraStation), CameraStation.project_id, db, user, project_id)
     return {
         "individuals": len(individuals),
         "detections": len(detections),
         "recapture_rate": recapture_rate,
-        "stations": db.scalar(select(func.count()).select_from(CameraStation)) or 0,
+        "stations": db.scalar(stn_stmt) or 0,
         "named": named,
         "unnamed": len(individuals) - named,
         "species": dict(species),
@@ -217,24 +278,34 @@ def map_data(
     user: User = Depends(get_current_user),
 ) -> dict:
     if mode == "stations":
-        stmt = select(CameraStation)
-        if project_id:
-            stmt = stmt.where(CameraStation.project_id == project_id)
+        stmt = apply_project_scope(select(CameraStation), CameraStation.project_id, db, user, project_id)
         stations = db.scalars(stmt).all()
         return {
             "mode": "stations",
             "points": [
-                {"id": s.id, "label": s.code, "lat": s.latitude, "lng": s.longitude, "kind": "station"}
+                {
+                    "id": s.id,
+                    "label": s.name or s.code,
+                    "lat": s.latitude,
+                    "lng": s.longitude,
+                    "kind": "station",
+                    "station_code": s.code,
+                }
                 for s in stations
+                if abs(float(s.latitude or 0)) > 0.01 or abs(float(s.longitude or 0)) > 0.01
             ],
         }
-    det_stmt = select(Detection).options(
-        selectinload(Detection.individual),
-        selectinload(Detection.station),
-        selectinload(Detection.media),
+    det_stmt = apply_project_scope(
+        select(Detection).options(
+            selectinload(Detection.individual),
+            selectinload(Detection.station),
+            selectinload(Detection.media),
+        ),
+        Detection.project_id,
+        db,
+        user,
+        project_id,
     )
-    if project_id:
-        det_stmt = det_stmt.where(Detection.project_id == project_id)
     detections = db.scalars(det_stmt).all()
     if individual_id:
         detections = [det for det in detections if det.individual_id == individual_id]
@@ -289,9 +360,7 @@ def stations(
         home = resolve_user_project(db, user)
         if home:
             project_id = home.id
-    stmt = select(CameraStation)
-    if project_id:
-        stmt = stmt.where(CameraStation.project_id == project_id)
+    stmt = apply_project_scope(select(CameraStation), CameraStation.project_id, db, user, project_id)
     rows = db.scalars(stmt).all()
     out = []
     for station in rows:
@@ -311,12 +380,71 @@ def stations(
     return out
 
 
+@router.post("/stations", response_model=StationOut)
+def create_station(
+    payload: StationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StationOut:
+    """Pin a camera trap on the map (Costa Rica field workflow)."""
+    if canonical_role(user.role) == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot add camera stations")
+    project = resolve_user_project(db, user, payload.project_id)
+    if not project:
+        raise HTTPException(status_code=400, detail="Select a project before pinning a camera")
+    require_project_access(db, user, project.id)
+
+    lat = float(payload.latitude)
+    lng = float(payload.longitude)
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        raise HTTPException(status_code=400, detail="Invalid coordinates")
+    if abs(lat) < 0.01 and abs(lng) < 0.01:
+        raise HTTPException(status_code=400, detail="Pin the camera on the map in Costa Rica")
+
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Station name is required")
+    code = (payload.code or "").strip().upper() or "".join(ch for ch in name.upper() if ch.isalnum())[:10] or "CAM"
+    base = code[:28]
+    existing = {
+        row.code
+        for row in db.scalars(select(CameraStation).where(CameraStation.project_id == project.id)).all()
+    }
+    n = 2
+    while code in existing:
+        code = f"{base}{n}"
+        n += 1
+
+    station = CameraStation(
+        project_id=project.id,
+        code=code,
+        name=name,
+        latitude=lat,
+        longitude=lng,
+        camera_model=(payload.camera_model or "").strip() or None,
+    )
+    db.add(station)
+    db.commit()
+    db.refresh(station)
+    return StationOut(
+        id=station.id,
+        code=station.code,
+        name=station.name,
+        latitude=station.latitude,
+        longitude=station.longitude,
+        camera_model=station.camera_model,
+        project_id=station.project_id,
+        detection_count=0,
+    )
+
+
 @router.get("/projects/{project_id}/data")
 def project_data(
     project_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("admin", "scientist")),
 ) -> list[dict]:
+    require_project_access(db, user, project_id)
     rows = db.scalars(
         select(Detection)
         .options(selectinload(Detection.individual), selectinload(Detection.station), selectinload(Detection.project))
@@ -347,8 +475,9 @@ def project_data(
 def capture_matrix(
     project_id: str,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("admin", "scientist")),
+    user: User = Depends(require_roles("admin", "scientist")),
 ) -> dict:
+    require_project_access(db, user, project_id)
     detections = db.scalars(
         select(Detection)
         .options(selectinload(Detection.individual))

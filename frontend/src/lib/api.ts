@@ -19,6 +19,53 @@ export type User = {
   study_region?: string | null;
   onboarding_complete?: boolean;
   home_project_id?: string | null;
+  org_memberships?: {
+    organization_id: string;
+    organization_name: string;
+    role: string;
+    role_label: string;
+  }[];
+  is_org_admin?: boolean;
+};
+
+export type OrgSummary = {
+  id: string;
+  name: string;
+  slug: string;
+  region?: string | null;
+  seat_limit: number;
+  seats_used: number;
+  license_status: string;
+  license_plan: string;
+  my_role?: string | null;
+  can_manage: boolean;
+};
+
+export type OrgMember = {
+  id: string;
+  user_id: string;
+  email?: string | null;
+  display_name?: string | null;
+  role: string;
+  role_label: string;
+  status: string;
+  created_at?: string | null;
+};
+
+export type OrgInvite = {
+  id: string;
+  email: string;
+  role: string;
+  role_label: string;
+  status: string;
+  created_at?: string | null;
+};
+
+export type OrgTeamResponse = {
+  organization: OrgSummary;
+  roles: { value: string; label: string }[];
+  members: OrgMember[];
+  invites: OrgInvite[];
 };
 
 export type Detection = {
@@ -277,6 +324,22 @@ export const api = {
     request<{ google: boolean; google_client_id?: string | null }>("/api/auth/providers"),
   me: () => request<User>("/api/auth/me"),
   patchMe: (body: object) => request<User>("/api/auth/me", { method: "PATCH", body: JSON.stringify(body) }),
+  myOrganizations: () => request<{ organizations: OrgSummary[] }>("/api/organizations/mine"),
+  orgTeam: (organizationId: string) => request<OrgTeamResponse>(`/api/organizations/${organizationId}/team`),
+  orgInvite: (organizationId: string, body: { email: string; role: string }) =>
+    request<{ status: string; message: string; invite?: OrgInvite; member?: OrgMember }>(
+      `/api/organizations/${organizationId}/invites`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  orgPatchMember: (organizationId: string, userId: string, body: { role: string }) =>
+    request<OrgMember>(`/api/organizations/${organizationId}/members/${userId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  orgRemoveMember: (organizationId: string, userId: string) =>
+    request<{ ok: boolean }>(`/api/organizations/${organizationId}/members/${userId}`, { method: "DELETE" }),
+  orgRevokeInvite: (organizationId: string, inviteId: string) =>
+    request<{ ok: boolean }>(`/api/organizations/${organizationId}/invites/${inviteId}`, { method: "DELETE" }),
   completeOnboarding: (body: object) =>
     request<User>("/api/auth/onboarding", { method: "POST", body: JSON.stringify(body) }),
   searchInstitutions: (q: string, affiliation?: string, country?: string) => {
@@ -313,6 +376,14 @@ export const api = {
   },
   stations: (projectId?: string) =>
     request<Station[]>(`/api/stations${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
+  createStation: (body: {
+    name: string;
+    code?: string;
+    latitude: number;
+    longitude: number;
+    project_id?: string;
+    camera_model?: string;
+  }) => request<Station>("/api/stations", { method: "POST", body: JSON.stringify(body) }),
   detections: (
     grade?: string,
     individualId?: string,
@@ -396,6 +467,22 @@ export const api = {
     request<User>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   adminOverview: () => request<any>("/api/admin/overview"),
   adminPeople: () => request<any[]>("/api/admin/people"),
+  adminLicenses: () => request<any>("/api/admin/licenses"),
+  adminPatchLicense: (
+    organizationId: string,
+    body: {
+      seat_limit?: number;
+      license_status?: string;
+      license_plan?: string;
+      owner_user_id?: string | null;
+      name?: string;
+      region?: string | null;
+    },
+  ) =>
+    request<any>(`/api/admin/licenses/${organizationId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   adminEstate: () => request<any>("/api/admin/estate"),
   adminWorkspace: (id: string) => request<any>(`/api/admin/workspaces/${id}`),
   adminCreateProject: (body: {
