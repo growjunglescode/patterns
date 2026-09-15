@@ -466,15 +466,7 @@ function UploadPageInner() {
                       ? { lat: Number(lat), lng: Number(lng) }
                       : null
                   }
-                  points={stations
-                    .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
-                    .map((s) => ({
-                      lat: s.latitude,
-                      lng: s.longitude,
-                      label: s.name || s.code,
-                      kind: "station",
-                      station_code: s.code,
-                    }))}
+                  points={[]}
                   onPick={(nextLat, nextLng) => {
                     setLat(String(nextLat));
                     setLng(String(nextLng));

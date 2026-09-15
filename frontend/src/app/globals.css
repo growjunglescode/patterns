@@ -410,6 +410,23 @@ a.btn {
   text-decoration: underline;
 }
 
+.map-popup-remove {
+  display: inline-block;
+  margin-top: 10px;
+  border: 1px solid #7a2e2e;
+  background: transparent;
+  color: #e8a39c;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.map-popup-remove:hover {
+  background: rgba(122, 46, 46, 0.18);
+}
+
 table {
   border-collapse: collapse;
 }

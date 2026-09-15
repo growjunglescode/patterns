@@ -5,6 +5,7 @@ import { mediaSrc } from "@/lib/api";
 import "leaflet/dist/leaflet.css";
 
 export type MapPoint = {
+  id?: string;
   lat: number;
   lng: number;
   label: string;
@@ -24,7 +25,7 @@ function escapeHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
-function popupHtml(point: MapPoint) {
+function popupHtml(point: MapPoint, opts?: { canRemove?: boolean }) {
   const when = point.captured_at
     ? new Date(point.captured_at).toLocaleString(undefined, {
         year: "numeric",
@@ -38,19 +39,26 @@ function popupHtml(point: MapPoint) {
   const coords = `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`;
   const photo = point.photo_url
     ? `<img class="map-popup-photo" src="${escapeHtml(mediaSrc(point.photo_url))}" alt="" />`
-    : `<div class="map-popup-photo map-popup-photo--empty">No photo</div>`;
+    : point.kind === "station"
+      ? ""
+      : `<div class="map-popup-photo map-popup-photo--empty">No photo</div>`;
   const link = point.href
     ? `<a class="map-popup-link" href="${escapeHtml(point.href)}">Open record →</a>`
     : "";
+  const remove =
+    opts?.canRemove && point.id
+      ? `<button type="button" class="map-popup-remove" data-remove-id="${escapeHtml(point.id)}" data-remove-kind="${escapeHtml(point.kind || "point")}">Remove pin</button>`
+      : "";
   return `
     <div class="map-popup">
       ${photo}
       <div class="map-popup-body">
         <p class="map-popup-name">${escapeHtml(point.label)}</p>
-        <p class="map-popup-meta">${escapeHtml(when)}</p>
+        ${point.kind === "station" ? "" : `<p class="map-popup-meta">${escapeHtml(when)}</p>`}
         <p class="map-popup-meta">${escapeHtml(place)}</p>
         <p class="map-popup-coords">${escapeHtml(coords)}</p>
         ${link}
+        ${remove}
       </div>
     </div>
   `;
@@ -107,6 +115,7 @@ export function SightingsMap({
   pin = null,
   onPick,
   pickHint = "Click the map to place the jaguar pin",
+  onRemovePoint,
 }: {
   points?: MapPoint[];
   track?: MapPoint[];
@@ -115,17 +124,20 @@ export function SightingsMap({
   pin?: { lat: number; lng: number } | null;
   onPick?: (lat: number, lng: number) => void;
   pickHint?: string;
+  onRemovePoint?: (point: MapPoint) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const markersRef = useRef<import("leaflet").LayerGroup | null>(null);
   const pinLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const onPickRef = useRef(onPick);
+  const onRemoveRef = useRef(onRemovePoint);
   const [mapHeight, setMapHeight] = useState(height);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
 
   onPickRef.current = onPick;
+  onRemoveRef.current = onRemovePoint;
 
   const dark =
     typeof document !== "undefined" && Boolean(document.querySelector(".ops"));
@@ -271,12 +283,27 @@ export function SightingsMap({
             fillColor: dark ? "#c4a35a" : point.kind === "station" ? "#1f6b52" : "#0c2b21",
             fillOpacity: 0.92,
           });
-          marker.bindPopup(popupHtml(point), {
+          const canRemove = Boolean(onRemoveRef.current && point.id && point.kind === "station");
+          marker.bindPopup(popupHtml(point, { canRemove }), {
             maxWidth: 260,
             minWidth: 200,
             className: "map-popup-wrap",
             autoPanPadding: [24, 24],
           });
+          if (canRemove) {
+            marker.on("popupopen", () => {
+              const btn = document.querySelector(
+                `.map-popup-remove[data-remove-id="${CSS.escape(point.id!)}"]`,
+              ) as HTMLButtonElement | null;
+              if (!btn) return;
+              btn.onclick = (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                onRemoveRef.current?.(point);
+                marker.closePopup();
+              };
+            });
+          }
           group.addLayer(marker);
         }
 
@@ -327,7 +354,7 @@ export function SightingsMap({
     return () => {
       cancelled = true;
     };
-  }, [ready, plotted, plottedTrack, dark, pinValid, pickable]);
+  }, [ready, plotted, plottedTrack, dark, pinValid, pickable, onRemovePoint]);
 
   useEffect(() => {
     mapRef.current?.invalidateSize();

@@ -109,6 +109,7 @@ function MapPageInner() {
         location: p.location,
         station_code: p.station_code,
         href: mode === "sightings" && p.id ? `/observations/${p.id}` : undefined,
+        id: p.id,
       })),
     [visiblePoints, mode],
   );
@@ -299,6 +300,16 @@ function MapPageInner() {
         pickHint={pickHint}
         pin={pin}
         onPick={(lat, lng) => setPin({ lat, lng })}
+        onRemovePoint={async (point) => {
+          if (point.kind !== "station" || !point.id) return;
+          try {
+            await api.deleteStation(point.id);
+            setNotice(`Removed camera pin ${point.label}.`);
+            setReloadKey((n) => n + 1);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Could not remove pin");
+          }
+        }}
       />
       {pinMode === "camera" && pin && (
         <form onSubmit={saveCamera} className="space-y-3 rounded-2xl border border-[var(--line)] bg-white p-4 shadow-card">

@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.admin_policy import is_super_admin_email
@@ -436,6 +436,27 @@ def create_station(
         project_id=station.project_id,
         detection_count=0,
     )
+
+
+@router.delete("/stations/{station_id}")
+def delete_station(
+    station_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Remove a camera pin from the map."""
+    if canonical_role(user.role) == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot remove camera stations")
+    station = db.get(CameraStation, station_id)
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+    require_project_access(db, user, station.project_id)
+    linked = db.scalar(select(func.count()).select_from(Detection).where(Detection.station_id == station.id)) or 0
+    if linked:
+        db.execute(update(Detection).where(Detection.station_id == station.id).values(station_id=None))
+    db.delete(station)
+    db.commit()
+    return {"status": "removed", "station_id": station_id, "detached_detections": int(linked)}
 
 
 @router.get("/projects/{project_id}/data")

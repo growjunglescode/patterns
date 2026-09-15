@@ -385,6 +385,8 @@ export const api = {
     project_id?: string;
     camera_model?: string;
   }) => request<Station>("/api/stations", { method: "POST", body: JSON.stringify(body) }),
+  deleteStation: (id: string) =>
+    request<{ status: string }>(`/api/stations/${id}`, { method: "DELETE" }),
   detections: (
     grade?: string,
     individualId?: string,
