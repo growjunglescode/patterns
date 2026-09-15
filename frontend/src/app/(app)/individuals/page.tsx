@@ -7,6 +7,7 @@ import { api, mediaSrc, type Individual } from "@/lib/api";
 import { Rosette } from "@/components/Brand";
 import { FilterBar, FilterSelect } from "@/components/FilterBar";
 import { matchesQuery, uniqueSorted } from "@/lib/filter";
+import { ALL_PROJECTS, writeProjectId } from "@/lib/project";
 import { useProjectId } from "@/lib/useProjectId";
 
 const LIFE: Record<string, string> = {
@@ -39,31 +40,97 @@ function IndividualsGrid() {
   const [status, setStatus] = useState("");
   const [sex, setSex] = useState("");
   const [life, setLife] = useState("");
-  const projectId = useProjectId();
+  const [projectFilter, setProjectFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const headerProjectId = useProjectId();
 
+  // Always load every individual the user can access — do not hide other projects.
   useEffect(() => {
-    api.individuals(undefined, projectId).then(setItems).catch(() => setItems([]));
-  }, [projectId]);
+    let cancelled = false;
+    setLoading(true);
+    api
+      .individuals()
+      .then((rows) => {
+        if (!cancelled) setItems(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Sync page filter from header when it changes (All projects → clear filter)
+  useEffect(() => {
+    setProjectFilter(headerProjectId || "");
+  }, [headerProjectId]);
+
+  const projectOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const ind of items) {
+      if (ind.project_id && ind.project_name) map.set(ind.project_id, ind.project_name);
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ value: id, label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [items]);
 
   const filtered = useMemo(
     () =>
       items.filter((ind) => {
+        if (projectFilter && ind.project_id !== projectFilter) return false;
         if (species && ind.species !== species) return false;
         if (status && ind.identity_status !== status) return false;
         if (sex && (ind.sex || "unknown") !== sex) return false;
         if (life && ind.life_status !== life) return false;
         return matchesQuery(ind, q);
       }),
-    [items, q, species, status, sex, life],
+    [items, q, species, status, sex, life, projectFilter],
   );
+
+  function onProjectFilter(next: string) {
+    setProjectFilter(next);
+    writeProjectId(next || ALL_PROJECTS);
+  }
 
   return (
     <div className="space-y-7">
       <div>
         <p className="page-kicker">Catalog</p>
         <h1 className="page-title mt-1">Individuals</h1>
-        <p className="lede">Each card is a living identity — named or waiting as a system ID.</p>
+        <p className="lede">
+          {projectFilter
+            ? "Filtered to one project. Choose All projects below to see every catalog you can access."
+            : "Showing every individual across projects you can access."}
+        </p>
       </div>
+
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper)] px-4 py-3">
+        <label className="block min-w-[12rem] flex-1 text-[12px]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink/45">Project</span>
+          <select
+            className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2.5 text-[14px] text-ink"
+            value={projectFilter}
+            onChange={(e) => onProjectFilter(e.target.value)}
+            aria-label="Filter by project"
+          >
+            <option value="">All projects</option>
+            {projectOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="pb-2 text-[12.5px] text-ink/50">
+          {loading ? "Loading…" : `${filtered.length} of ${items.length} individuals`}
+        </p>
+      </div>
+
       <FilterBar query={q} onQuery={setQ} placeholder="Filter by name or ID…" showing={filtered.length} total={items.length}>
         <FilterSelect label="All species" value={species} onChange={setSpecies} options={uniqueSorted(items.map((i) => i.species))} />
         <FilterSelect label="All statuses" value={status} onChange={setStatus} options={uniqueSorted(items.map((i) => i.identity_status))} />
@@ -102,6 +169,9 @@ function IndividualsGrid() {
                     {ind.code} · {ind.species}
                     {ind.sex ? ` · ${ind.sex}` : ""}
                   </p>
+                  {ind.project_name ? (
+                    <p className="mt-1 text-[11px] uppercase tracking-[0.1em] text-gold/80">{ind.project_name}</p>
+                  ) : null}
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-ink/10 pt-3 text-[12.5px]">
                   <div>
@@ -127,7 +197,7 @@ function IndividualsGrid() {
             </Link>
           );
         })}
-        {filtered.length === 0 && <p className="text-ink/40">No individuals match these filters.</p>}
+        {!loading && filtered.length === 0 && <p className="text-ink/40">No individuals match these filters.</p>}
       </div>
     </div>
   );

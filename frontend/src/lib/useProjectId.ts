@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PROJECT_EVENT, readProjectId } from "@/lib/project";
+import { PROJECT_EVENT, readProjectId, scopedProjectId } from "@/lib/project";
 
-/** Current project from the ops header switcher. Reloads when it changes. */
+/** Current project from the ops header switcher. Reloads when it changes.
+ *  Returns undefined when “All projects” is selected. */
 export function useProjectId() {
   const [projectId, setProjectId] = useState("");
 
@@ -16,5 +17,5 @@ export function useProjectId() {
     return () => window.removeEventListener(PROJECT_EVENT, sync);
   }, []);
 
-  return projectId || undefined;
+  return scopedProjectId(projectId);
 }

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { CoatPrint, Grain, Wordmark } from "@/components/Brand";
 import { api, type User } from "@/lib/api";
-import { readProjectId, writeProjectId } from "@/lib/project";
+import { ALL_PROJECTS, readProjectId, writeProjectId } from "@/lib/project";
 import { RoleViewProvider, RoleViewSwitcher, useRoleView } from "@/components/RoleView";
 import { isAdmin, navFor, roleLabel, type NavItem } from "@/lib/roles";
 
@@ -60,11 +60,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               setProjectCount(p?.totals?.projects ?? list.length);
               const saved = readProjectId();
               const preferred = me.home_project_id || "";
-              const next = list.some((row: { id: string }) => row.id === saved)
-                ? saved
-                : list.some((row: { id: string }) => row.id === preferred)
-                  ? preferred
-                  : list[0]?.id || "";
+              let next = saved;
+              if (saved === ALL_PROJECTS) {
+                next = ALL_PROJECTS;
+              } else if (list.some((row: { id: string }) => row.id === saved)) {
+                next = saved;
+              } else if (list.length > 1) {
+                // Multiple catalogs: start on All projects so nothing is hidden
+                next = ALL_PROJECTS;
+              } else if (list.some((row: { id: string }) => row.id === preferred)) {
+                next = preferred;
+              } else {
+                next = list[0]?.id || "";
+              }
               if (next && next !== saved) writeProjectId(next);
               setProjectId(next);
             })
@@ -315,7 +323,7 @@ function AppShellChrome({
                   const scoped = nextOrg
                     ? projects.filter((p) => (p.organization_id || p.organization_name) === nextOrg)
                     : projects;
-                  if (scoped.length && !scoped.some((p) => p.id === projectId)) {
+                  if (scoped.length && projectId !== ALL_PROJECTS && !scoped.some((p) => p.id === projectId)) {
                     writeProjectId(scoped[0].id);
                     setProjectId(scoped[0].id);
                   }
@@ -330,21 +338,28 @@ function AppShellChrome({
                 ))}
               </select>
             )}
-            {visibleProjects.length > 1 && (
-              <select
-                value={projectId}
-                onChange={(e) => {
-                  writeProjectId(e.target.value);
-                  setProjectId(e.target.value);
-                }}
-                className="min-w-0 max-w-[9rem] shrink !rounded-md !border-0 !bg-transparent !px-0 !py-0 text-[11px] uppercase tracking-[0.1em] text-[#8a9a92] sm:max-w-[14rem] sm:text-[12.5px] sm:tracking-[0.12em]"
-              >
-                {visibleProjects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.organization_name ? `${p.organization_name} · ${p.name}` : p.name}
-                  </option>
-                ))}
-              </select>
+            {visibleProjects.length > 0 && (
+              <label className="flex min-w-0 max-w-[11rem] shrink items-center gap-1.5 sm:max-w-[16rem]">
+                <span className="hidden shrink-0 text-[10px] uppercase tracking-[0.12em] text-[#8a9a92] sm:inline">
+                  Project
+                </span>
+                <select
+                  aria-label="Project filter"
+                  value={projectId || ALL_PROJECTS}
+                  onChange={(e) => {
+                    writeProjectId(e.target.value);
+                    setProjectId(e.target.value);
+                  }}
+                  className="min-w-0 flex-1 !rounded-md !border !border-[#2a3832] !bg-[#0c1210] !px-2 !py-1.5 text-[10px] uppercase tracking-[0.08em] text-[#e6ede8] sm:text-[11px]"
+                >
+                  {visibleProjects.length > 1 && <option value={ALL_PROJECTS}>All projects</option>}
+                  {visibleProjects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.organization_name ? `${p.organization_name} · ${p.name}` : p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
             <p className="min-w-0 text-[9px] leading-snug text-[#8a9a92] sm:text-[11px]">
               In partnership with{" "}
