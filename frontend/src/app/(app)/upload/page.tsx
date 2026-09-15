@@ -7,16 +7,21 @@ import { canName } from "@/lib/roles";
 import { readProjectId } from "@/lib/project";
 import { useProjectId } from "@/lib/useProjectId";
 import { ReviewStateBadge } from "@/components/GradeBadge";
+import { CoatScanOverlay } from "@/components/CoatScanOverlay";
+import { CANDIDATE_SCORE_HELP, FLANK_HELP, InfoTip } from "@/components/InfoTip";
+import { SightingsMap } from "@/components/SightingsMap";
 
 export default function UploadPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [obs, setObs] = useState<Detection | null>(null);
   const [askSpecies, setAskSpecies] = useState(false);
   const [assertSpecies, setAssertSpecies] = useState("jaguar");
   const [localPreview, setLocalPreview] = useState<string | null>(null);
+  const [previewIsVideo, setPreviewIsVideo] = useState(false);
   const [name, setName] = useState("");
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
@@ -38,6 +43,7 @@ export default function UploadPage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
+    setScanning(true);
     setError("");
     try {
       const form = new FormData(e.currentTarget);
@@ -46,8 +52,12 @@ export default function UploadPage() {
         URL.revokeObjectURL(localPreview);
         setLocalPreview(null);
       }
-      if (file instanceof File && file.type.startsWith("image/")) {
-        setLocalPreview(URL.createObjectURL(file));
+      setPreviewIsVideo(false);
+      if (file instanceof File) {
+        if (file.type.startsWith("image/") || file.type.startsWith("video/")) {
+          setLocalPreview(URL.createObjectURL(file));
+          setPreviewIsVideo(file.type.startsWith("video/"));
+        }
       }
       const projectId = readProjectId();
       if (projectId) form.set("project_id", projectId);
@@ -57,6 +67,7 @@ export default function UploadPage() {
       setLat(result.latitude != null ? String(result.latitude) : "");
       setLng(result.longitude != null ? String(result.longitude) : "");
       setWhen(result.captured_at ? result.captured_at.slice(0, 16) : "");
+      setScanning(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -190,10 +201,11 @@ export default function UploadPage() {
   const isConfirmed = obs?.review_state === "confirmed_match" || alreadyNamed;
   const canRegister =
     Boolean(obs?.can_register_new) &&
-    locationReady &&
     !alreadyNamed &&
     !askSpecies &&
     (!isPotential || isRejected || (obs?.candidates?.length ?? 0) === 0);
+  const showNameForm = canRegister || Boolean(obs?.needs_name && !askSpecies);
+  const mayProposeName = Boolean(user && canName(user.role, user.verified));
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -205,7 +217,28 @@ export default function UploadPage() {
         </p>
       </div>
 
-      {!obs && (
+      {!obs && scanning && (
+        <div className="space-y-4">
+          <CoatScanOverlay previewUrl={localPreview} isVideo={previewIsVideo} />
+          {error && (
+            <div className="space-y-3 rounded-[1.2rem] bg-paper p-5 shadow-card">
+              <p className="text-sm text-red-700">{error}</p>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => {
+                  setScanning(false);
+                  setError("");
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!obs && !scanning && (
         <form onSubmit={onSubmit} className="space-y-4 rounded-[1.4rem] bg-paper p-7 shadow-card">
           {error && <p className="text-sm text-red-700">{error}</p>}
           <input name="file" type="file" required accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" />
@@ -217,18 +250,24 @@ export default function UploadPage() {
               </option>
             ))}
           </select>
-          <select name="side" required className="w-full rounded-lg border px-3 py-2 text-[0.9375rem]">
-            <option value="">Flank — required for matching</option>
-            <option value="L">Left flank</option>
-            <option value="R">Right flank</option>
-            <option value="U">Unknown / not sure</option>
-          </select>
+          <label className="block">
+            <span className="mb-1 inline-flex items-center text-[12.5px] text-ink/55">
+              Flank
+              <InfoTip label="About flank">{FLANK_HELP}</InfoTip>
+            </span>
+            <select name="side" required className="mt-1 w-full rounded-lg border px-3 py-2 text-[0.9375rem]">
+              <option value="">Flank — required for matching</option>
+              <option value="L">Left flank</option>
+              <option value="R">Right flank</option>
+              <option value="U">Unknown / not sure</option>
+            </select>
+          </label>
           <p className="text-[12.5px] text-ink/45">
             Left or right is required for research-grade identifications. Unknown still ranks, but cannot reach research grade.
           </p>
           <textarea name="notes" placeholder="Field notes" className="w-full rounded-lg border px-3 py-2" rows={2} />
           <button disabled={busy} className="btn-gold w-full disabled:opacity-50">
-            {busy ? "Reading metadata and matching coat…" : "Analyze photo"}
+            Analyze photo
           </button>
         </form>
       )}
@@ -350,58 +389,87 @@ export default function UploadPage() {
             </div>
           )}
 
-          {missing && !askSpecies && (
+          {!askSpecies && (
             <form onSubmit={saveMeta} className="space-y-3 rounded-xl border border-gold/40 bg-white p-5 shadow-card">
               <h2 className="section-title">
-                {missingLocation ? "Location required" : "Capture time missing"}
+                {missingLocation ? "Location required" : missingTime ? "Capture time missing" : "Field location"}
               </h2>
               <p className="text-[13px] text-ink/55">
                 {obs.location_from_exif
-                  ? "GPS was read from the file."
-                  : "No GPS in the file EXIF. Choose a camera station or enter coordinates before matching or naming."}
+                  ? "GPS was read from the file — click the map to adjust if needed."
+                  : "Choose a camera station or click the map to pin the jaguar before matching or naming."}
               </p>
               {missingTime && (
                 <label className="block text-[13px]">
                   Capture time
-                  <input type="datetime-local" className="mt-1 w-full rounded-lg border px-3 py-2" value={when} onChange={(e) => setWhen(e.target.value)} required={missingTime && !missingLocation} />
+                  <input
+                    type="datetime-local"
+                    className="mt-1 w-full rounded-lg border px-3 py-2"
+                    value={when}
+                    onChange={(e) => setWhen(e.target.value)}
+                    required={missingTime}
+                  />
                 </label>
               )}
-              {missingLocation && (
-                <>
-                  <select
-                    className="w-full rounded-lg border px-3 py-2"
-                    value={stationId}
-                    onChange={(e) => setStationId(e.target.value)}
-                    required={!lat || !lng}
-                  >
-                    <option value="">Choose a station, or type coordinates</option>
-                    {stations.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.code} — {s.name || s.code}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      className="rounded-lg border px-3 py-2"
-                      placeholder="Latitude"
-                      value={lat}
-                      onChange={(e) => setLat(e.target.value)}
-                      required={!stationId}
-                    />
-                    <input
-                      className="rounded-lg border px-3 py-2"
-                      placeholder="Longitude"
-                      value={lng}
-                      onChange={(e) => setLng(e.target.value)}
-                      required={!stationId}
-                    />
-                  </div>
-                </>
-              )}
+              <select
+                className="w-full rounded-lg border px-3 py-2"
+                value={stationId}
+                onChange={(e) => setStationId(e.target.value)}
+                required={missingLocation && (!lat || !lng)}
+              >
+                <option value="">Choose a station, or pin on the map</option>
+                {stations.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} — {s.name || s.code}
+                  </option>
+                ))}
+              </select>
+              <div>
+                <p className="mb-2 text-[12.5px] text-ink/55">Click the map to place or move the pin</p>
+                <SightingsMap
+                  height={280}
+                  pickable
+                  pickHint="Click to place the jaguar pin"
+                  pin={
+                    lat && lng && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+                      ? { lat: Number(lat), lng: Number(lng) }
+                      : null
+                  }
+                  points={stations
+                    .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
+                    .map((s) => ({
+                      lat: s.latitude,
+                      lng: s.longitude,
+                      label: s.name || s.code,
+                      kind: "station",
+                      station_code: s.code,
+                    }))}
+                  onPick={(nextLat, nextLng) => {
+                    setLat(String(nextLat));
+                    setLng(String(nextLng));
+                    setStationId("");
+                  }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  className="rounded-lg border px-3 py-2"
+                  placeholder="Latitude"
+                  value={lat}
+                  onChange={(e) => setLat(e.target.value)}
+                  required={missingLocation && !stationId}
+                />
+                <input
+                  className="rounded-lg border px-3 py-2"
+                  placeholder="Longitude"
+                  value={lng}
+                  onChange={(e) => setLng(e.target.value)}
+                  required={missingLocation && !stationId}
+                />
+              </div>
               {error && <p className="text-sm text-red-700">{error}</p>}
               <button disabled={busy} className="rounded-full bg-forest px-4 py-2 text-sm text-canvas">
-                Save field location
+                {missing ? "Save field location" : "Update location"}
               </button>
             </form>
           )}
@@ -461,85 +529,97 @@ export default function UploadPage() {
           {!askSpecies && !alreadyNamed && !isConfirmed && isPotential && obs.candidates.length > 0 && !obs.individual_id && (
             <div className="rounded-xl bg-white p-5 shadow-card">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="section-title mb-0">Possible previous sighting</p>
+                <p className="section-title mb-0 inline-flex items-center">
+                  Possible previous sighting
+                  <InfoTip label="About similarity scores">{CANDIDATE_SCORE_HELP}</InfoTip>
+                </p>
                 <ReviewStateBadge state="potential_match" />
               </div>
               <p className="mt-1 text-[13px] text-ink/55">
-                Top jaguar matches — a person must confirm. The app never assigns identity automatically.
+                Tap a jaguar to confirm the match. The app never assigns identity on its own.
               </p>
               {!locationReady && (
                 <p className="mt-2 text-[13px] text-gold">Save location above before confirming a match.</p>
               )}
               {libraryNote && <p className="mt-1 text-[13px] text-gold">{libraryNote}</p>}
-              <ul className="mt-3 space-y-2">
-                {obs.candidates.slice(0, 5).map((candidate) => (
-                  <li key={candidate.id} className="flex items-center justify-between gap-3">
-                    <span>
-                      <strong>{candidate.display_name}</strong>{" "}
-                      <span className="font-mono text-[12.5px] text-ink/45">{candidate.code}</span>{" "}
-                      <span className="text-ink/45">({(candidate.score * 100).toFixed(0)}%)</span>
-                    </span>
-                    {user && canName(user.role, user.verified) && (
-                      <button
-                        type="button"
-                        className="rounded-full bg-forest px-3 py-1 text-xs text-canvas disabled:opacity-40"
-                        onClick={() => confirmKnown(candidate.id)}
-                        disabled={busy || !locationReady}
-                      >
-                        Confirm
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <div className="mt-4 space-y-2.5">
+                {obs.candidates.slice(0, 5).map((candidate, index) => {
+                  const canConfirm = Boolean(user && canName(user.role, user.verified));
+                  return (
+                    <button
+                      key={candidate.id}
+                      type="button"
+                      onClick={() => canConfirm && locationReady && !busy && confirmKnown(candidate.id)}
+                      disabled={busy || !locationReady || !canConfirm}
+                      className="flex w-full items-center gap-3 rounded-2xl border-2 border-forest/15 bg-[#f7f3ea] px-4 py-3.5 text-left transition hover:border-forest/40 hover:bg-[#efe8d8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-forest text-[13px] font-semibold text-canvas">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] font-semibold text-ink">{candidate.display_name}</span>
+                        <span className="mt-0.5 block font-mono text-[12px] text-ink/45">
+                          {candidate.code} · {(candidate.score * 100).toFixed(0)}% similar
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-forest px-3.5 py-2 text-[12.5px] font-semibold text-canvas">
+                        Select
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               {knownCandidate && knownCandidate.score >= 0.68 && (
-                <p className="mt-2 text-[13px] text-ink/55">
-                  Best match: <strong>{knownCandidate.display_name}</strong>. If this is the same individual, confirm it. Do not create a new name.
+                <p className="mt-3 text-[13px] text-ink/55">
+                  Best match: <strong>{knownCandidate.display_name}</strong>. If this is the same individual, select it above.
                 </p>
               )}
               {user && canName(user.role, user.verified) && (
                 <button
                   type="button"
-                  className="mt-3 rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink"
+                  className="mt-4 w-full rounded-2xl border-2 border-ink/15 bg-white px-4 py-3.5 text-[14px] font-semibold text-ink transition hover:border-ink/30 hover:bg-paper disabled:opacity-40"
                   onClick={rejectMatch}
                   disabled={busy}
                 >
-                  Not a match — register as a new jaguar
+                  None of these — register as a new jaguar
                 </button>
               )}
             </div>
           )}
 
-          {(canRegister || (obs.needs_name && locationReady)) && (
-            <form onSubmit={registerNew} className="space-y-3 rounded-xl bg-white p-5 shadow-card">
+          {showNameForm && (
+            <form onSubmit={registerNew} className="space-y-3 rounded-xl border border-gold/35 bg-white p-5 shadow-card">
               <h2 className="section-title">
-                {obs.individual_id ? "Propose a name" : "No match — name this jaguar"}
+                {obs.individual_id ? "Name this jaguar" : "Name this jaguar"}
               </h2>
               <p className="text-[13px] text-ink/55">
-                Species: <strong>Jaguar</strong> (<em>{obs.scientific_name || "Panthera onca"}</em>). Propose a unique common name.
-                An admin must approve it. Until then the animal is tracked by system ID.
+                Type a unique common name now. You can fill location above first if GPS was missing — then submit for admin approval.
               </p>
               {!locationReady && (
-                <p className="text-[13px] text-gold">Add location first (EXIF was empty).</p>
+                <p className="text-[13px] text-gold">Save a field location before submitting the name.</p>
               )}
-              {user && !canName(user.role, user.verified) && (
+              {!mayProposeName && (
                 <p className="text-[13px] text-gold">Only verified scientists can propose names. Ask an admin to verify you.</p>
               )}
               {error && <p className="text-sm text-red-700">{error}</p>}
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Proposed name, e.g. Sibú"
-                minLength={2}
-                required
-                disabled={!locationReady || !canName(user?.role, user?.verified)}
-              />
+              <label className="block text-[12px]">
+                <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Jaguar name</span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2.5 text-[15px] text-ink"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Sibú"
+                  minLength={2}
+                  required
+                  disabled={!mayProposeName}
+                  autoComplete="off"
+                />
+              </label>
               <button
-                disabled={busy || !locationReady || !canName(user?.role, user?.verified)}
+                disabled={busy || !locationReady || !mayProposeName}
                 className="rounded-full bg-gold px-4 py-2 text-sm font-bold text-white disabled:opacity-40"
               >
-                Register jaguar + submit name for approval
+                {obs.individual_id ? "Submit name for approval" : "Register jaguar + submit name"}
               </button>
             </form>
           )}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { SightingsMap } from "@/components/SightingsMap";
 import { GradeBadge, ReviewStateBadge } from "@/components/GradeBadge";
+import { CANDIDATE_SCORE_HELP, InfoTip } from "@/components/InfoTip";
 import { api, mediaSrc, type Detection, type Station } from "@/lib/api";
 
 function fmtDateTime(value?: string | null) {
@@ -16,11 +17,6 @@ function fmtDateTime(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function fmtCoords(lat?: number | null, lng?: number | null) {
-  if (lat == null || lng == null) return "—";
-  return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
 
 export default function ObservationDetailPage() {
@@ -46,6 +42,7 @@ export default function ObservationDetailPage() {
         setLat(row.latitude != null ? String(row.latitude) : "");
         setLng(row.longitude != null ? String(row.longitude) : "");
         setWhen(row.captured_at ? row.captured_at.slice(0, 16) : "");
+        setStationId(row.station_id || "");
         setNotes(row.notes || "");
       })
       .catch((e) => setError(e.message));
@@ -154,9 +151,11 @@ export default function ObservationDetailPage() {
   const locationReady = !obs.missing_location;
   const showRegister =
     Boolean(obs.can_register_new) &&
-    locationReady &&
     !obs.individual_id &&
     (obs.review_state === "rejected_match" || !obs.candidates.length);
+  const showNameField =
+    showRegister || Boolean(obs.individual_id && (obs.needs_name || obs.individual_code === obs.individual_name));
+  const namedLocked = Boolean(obs.individual_name && !obs.needs_name && obs.individual_code !== obs.individual_name);
   const mapPoints =
     obs.latitude != null && obs.longitude != null
       ? [
@@ -279,66 +278,198 @@ export default function ObservationDetailPage() {
           {obs.engine ? ` · ${obs.engine}` : ""}
         </p>
 
-        <div className="surface space-y-3 p-5">
-          <p className="section-title">Sighting record</p>
-          <dl className="grid gap-3 text-[13px] sm:grid-cols-2">
-            {[
-              ["Name", obs.individual_name || "Not named yet"],
-              ["Taken", fmtDateTime(obs.captured_at)],
-              ["Location", obs.station_name || obs.station_code || "—"],
-              ["Country", obs.country || "—"],
-              ["Coordinates", fmtCoords(obs.latitude, obs.longitude)],
-              ["Project", obs.project_name || "—"],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">{label}</dt>
-                <dd className="mt-0.5">{value}</dd>
-              </div>
-            ))}
-          </dl>
-          {(obs.notes || obs.summary) && (
-            <div className="border-t border-[var(--line)] pt-3">
-              <p className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Scientific notes</p>
-              <p className="mt-1 whitespace-pre-line text-[13.5px]">{obs.notes || obs.summary}</p>
-            </div>
-          )}
-        </div>
-
-        <form onSubmit={saveMeta} className="space-y-3 rounded-2xl border border-[var(--line)] bg-white p-5 shadow-card">
-          <h2 className="section-title">{obs.missing_location ? "Field location required" : "Update field metadata"}</h2>
-          {obs.missing_location && (
-            <p className="text-[13px] text-ink/55">
-              Choose a station or enter coordinates before matching or naming.
+        <form
+          onSubmit={saveMeta}
+          className={`space-y-4 rounded-2xl border p-5 shadow-card ${
+            obs.missing_location || obs.missing_time
+              ? "border-gold/45 bg-[#f7f3ea]"
+              : "border-[var(--line)] bg-white"
+          }`}
+        >
+          <div>
+            <h2 className="section-title">Sighting record</h2>
+            <p className="mt-1 text-[13px] text-ink/55">
+              {obs.missing_location || !obs.individual_name
+                ? "Edit time and location here — then you can match or name this jaguar."
+                : "Update field details anytime. Changes apply when you save."}
             </p>
-          )}
-          <input
-            type="datetime-local"
-            className="w-full rounded-lg border px-3 py-2"
-            value={when}
-            onChange={(e) => setWhen(e.target.value)}
-          />
-          <select className="w-full rounded-lg border px-3 py-2" value={stationId} onChange={(e) => setStationId(e.target.value)}>
-            <option value="">Choose station or type GPS</option>
-            {stations.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code} · {s.name}
-              </option>
-            ))}
-          </select>
-          <div className="grid grid-cols-2 gap-2">
-            <input className="rounded-lg border px-3 py-2" placeholder="Latitude" value={lat} onChange={(e) => setLat(e.target.value)} />
-            <input className="rounded-lg border px-3 py-2" placeholder="Longitude" value={lng} onChange={(e) => setLng(e.target.value)} />
           </div>
-          <textarea
-            className="w-full rounded-lg border px-3 py-2"
-            rows={3}
-            placeholder="Scientific notes for this photo…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-[12px] sm:col-span-2">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Name</span>
+              {namedLocked ? (
+                <span className="mt-1 block rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-[14px] font-medium text-ink">
+                  {obs.individual_name}
+                  {obs.individual_code ? (
+                    <span className="ml-2 font-mono text-[12px] font-normal text-ink/45">{obs.individual_code}</span>
+                  ) : null}
+                </span>
+              ) : (
+                <input
+                  className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2.5 text-[15px] text-ink"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={showNameField ? "Type a jaguar name, e.g. Itzel" : "Not named yet — match or register below"}
+                  disabled={!showNameField}
+                  minLength={2}
+                  autoComplete="off"
+                />
+              )}
+              {showNameField && !namedLocked && (
+                <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {!locationReady && (
+                    <span className="text-[12px] text-gold">Save location, then submit the name.</span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={busy || !locationReady || name.trim().length < 2}
+                    className="rounded-full bg-gold px-3.5 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-40"
+                    onClick={async () => {
+                      if (obs.individual_id) {
+                        const fake = { preventDefault() {} } as FormEvent;
+                        await propose(fake);
+                      } else {
+                        const fake = { preventDefault() {} } as FormEvent;
+                        await createNew(fake);
+                      }
+                    }}
+                  >
+                    {obs.individual_id ? "Submit name" : "Register + submit name"}
+                  </button>
+                </span>
+              )}
+            </label>
+
+            <label className="block text-[12px]">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">
+                Taken{obs.missing_time ? " · required" : ""}
+              </span>
+              <input
+                type="datetime-local"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+              />
+            </label>
+
+            <label className="block text-[12px]">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Project</span>
+              <span className="mt-1 block rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-[14px] text-ink">
+                {obs.project_name || "—"}
+              </span>
+            </label>
+
+            <label className="block text-[12px] sm:col-span-2">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">
+                Location{obs.missing_location ? " · required" : ""}
+              </span>
+              <select
+                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                value={stationId}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setStationId(next);
+                  const station = stations.find((s) => s.id === next);
+                  if (station && Number.isFinite(station.latitude) && Number.isFinite(station.longitude)) {
+                    setLat(String(station.latitude));
+                    setLng(String(station.longitude));
+                  }
+                }}
+              >
+                <option value="">Choose station or pin on the map</option>
+                {stations.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} · {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-[12px]">
+              <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Country</span>
+              <span className="mt-1 block rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-[14px] text-ink">
+                {obs.country || "—"}
+              </span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-2 sm:col-span-1">
+              <label className="block text-[12px]">
+                <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Latitude</span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                  placeholder="e.g. 8.54012"
+                  value={lat}
+                  onChange={(e) => {
+                    setLat(e.target.value);
+                    setStationId("");
+                  }}
+                />
+              </label>
+              <label className="block text-[12px]">
+                <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Longitude</span>
+                <input
+                  className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                  placeholder="e.g. -83.50741"
+                  value={lng}
+                  onChange={(e) => {
+                    setLng(e.target.value);
+                    setStationId("");
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-[12.5px] text-ink/55">
+              {obs.missing_location
+                ? "No GPS yet — click the map to place the pin, or fill latitude/longitude above."
+                : "Click the map to move the pin."}
+            </p>
+            <SightingsMap
+              height={260}
+              pickable
+              pickHint="Click to place the jaguar pin"
+              pin={
+                lat && lng && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+                  ? { lat: Number(lat), lng: Number(lng) }
+                  : null
+              }
+              points={stations
+                .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
+                .map((s) => ({
+                  lat: s.latitude,
+                  lng: s.longitude,
+                  label: s.name || s.code,
+                  kind: "station",
+                  station_code: s.code,
+                }))}
+              onPick={(nextLat, nextLng) => {
+                setLat(String(nextLat));
+                setLng(String(nextLng));
+                setStationId("");
+              }}
+            />
+          </div>
+
+          <label className="block text-[12px]">
+            <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Scientific notes</span>
+            <textarea
+              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+              rows={3}
+              placeholder="Scientific notes for this photo…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </label>
+          {obs.summary && !notes && (
+            <p className="whitespace-pre-line text-[12.5px] text-ink/50">{obs.summary}</p>
+          )}
+
           {error && <p className="text-sm text-red-700">{error}</p>}
           <button disabled={busy} className="rounded-full bg-forest px-4 py-2 text-sm text-canvas">
-            Save metadata
+            {obs.missing_location ? "Save location" : "Save changes"}
           </button>
         </form>
 
@@ -363,43 +494,52 @@ export default function ObservationDetailPage() {
         )}
         {obs.candidates.length > 0 && !obs.known_match && !obs.individual_id && (
           <div className="rounded-2xl bg-white p-5 shadow-card">
-            <p className="text-xs uppercase tracking-widest text-ink/40">Ranked jaguar candidates</p>
+            <p className="inline-flex items-center text-xs uppercase tracking-widest text-ink/40">
+              Ranked jaguar candidates
+              <InfoTip label="About similarity scores">{CANDIDATE_SCORE_HELP}</InfoTip>
+            </p>
             <p className="mt-1 text-[13px] text-ink/55">
-              Confirm a match, reject, or register as a new jaguar. The app never auto-names.
+              Tap a jaguar to confirm. Or reject and register a new one. The app never auto-names.
             </p>
             {!locationReady && <p className="mt-2 text-[13px] text-gold">Save location before confirming.</p>}
-            <ul className="mt-3 space-y-2">
-              {obs.candidates.map((c) => (
-                <li key={c.id} className="flex items-center justify-between">
-                  <span>
-                    {c.display_name} <span className="font-mono text-ink/40">{c.code}</span>
+            <div className="mt-4 space-y-2.5">
+              {obs.candidates.map((c, index) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => locationReady && !busy && confirm(c.id)}
+                  disabled={busy || !locationReady}
+                  className="flex w-full items-center gap-3 rounded-2xl border-2 border-forest/15 bg-[#f7f3ea] px-4 py-3.5 text-left transition hover:border-forest/40 hover:bg-[#efe8d8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-forest text-[13px] font-semibold text-canvas">
+                    {index + 1}
                   </span>
-                  <span className="flex items-center gap-2">
-                    <span className="font-mono text-sm">{c.score.toFixed(2)}</span>
-                    <button
-                      className="rounded-full bg-forest px-3 py-1 text-xs text-canvas disabled:opacity-40"
-                      onClick={() => confirm(c.id)}
-                      disabled={!locationReady}
-                    >
-                      Confirm
-                    </button>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-semibold text-ink">{c.display_name}</span>
+                    <span className="mt-0.5 block font-mono text-[12px] text-ink/45">
+                      {c.code} · {(c.score * 100).toFixed(0)}% similar
+                    </span>
                   </span>
-                </li>
+                  <span className="shrink-0 rounded-full bg-forest px-3.5 py-2 text-[12.5px] font-semibold text-canvas">
+                    Select
+                  </span>
+                </button>
               ))}
-            </ul>
+            </div>
             <button
-              className="mt-4 text-sm text-gold"
+              type="button"
+              className="mt-4 w-full rounded-2xl border-2 border-ink/15 bg-white px-4 py-3.5 text-[14px] font-semibold text-ink transition hover:border-ink/30 hover:bg-paper"
               onClick={async () => setObs(await api.confirm(id, { reject: true }))}
             >
-              Not a match — register as new jaguar
+              None of these — register as a new jaguar
             </button>
           </div>
         )}
-        {showRegister && (
+        {showRegister && locationReady && !name.trim() && (
           <form onSubmit={createNew} className="space-y-3 rounded-2xl bg-white p-5 shadow-card">
             <h2 className="section-title">No match — name this jaguar</h2>
             <p className="text-sm text-ink/50">
-              <em>{obs.scientific_name || "Panthera onca"}</em>. Propose a unique common name for admin approval.
+              <em>{obs.scientific_name || "Panthera onca"}</em>. Propose a unique common name for admin approval — or type it in the Sighting record above.
             </p>
             {error && <p className="text-sm text-red-700">{error}</p>}
             <input
@@ -415,10 +555,10 @@ export default function ObservationDetailPage() {
             </button>
           </form>
         )}
-        {obs.individual_id && (obs.needs_name || obs.individual_code === obs.individual_name) && (
+        {obs.individual_id && (obs.needs_name || obs.individual_code === obs.individual_name) && locationReady && !name.trim() && (
           <form onSubmit={propose} className="space-y-3 rounded-2xl bg-white p-5 shadow-card">
             <h2 className="section-title">Propose a canonical name</h2>
-            <p className="text-sm text-ink/50">Verified researchers propose; an admin approves. Names cannot overlap.</p>
+            <p className="text-sm text-ink/50">Verified researchers propose; an admin approves. Names cannot overlap — or type it in the Sighting record above.</p>
             {error && <p className="text-sm text-red-700">{error}</p>}
             <input className="w-full rounded-lg border px-4 py-3" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Itzel" required />
             <button className="rounded-full bg-gold px-5 py-2 text-white">Submit for approval</button>
