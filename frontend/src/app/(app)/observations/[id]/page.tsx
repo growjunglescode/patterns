@@ -7,6 +7,7 @@ import { SightingsMap } from "@/components/SightingsMap";
 import { GradeBadge, ReviewStateBadge } from "@/components/GradeBadge";
 import { CANDIDATE_SCORE_HELP, InfoTip } from "@/components/InfoTip";
 import { api, mediaSrc, type Detection, type Station } from "@/lib/api";
+import { isScientist } from "@/lib/roles";
 
 function fmtDateTime(value?: string | null) {
   if (!value) return "—";
@@ -23,6 +24,7 @@ export default function ObservationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [obs, setObs] = useState<Detection | null>(null);
   const [stations, setStations] = useState<Station[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [gallery, setGallery] = useState<Detection[]>([]);
   const [galleryLabel, setGalleryLabel] = useState("");
   const [name, setName] = useState("");
@@ -30,6 +32,8 @@ export default function ObservationDetailPage() {
   const [lng, setLng] = useState("");
   const [when, setWhen] = useState("");
   const [stationId, setStationId] = useState("");
+  const [country, setCountry] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -43,6 +47,8 @@ export default function ObservationDetailPage() {
         setLng(row.longitude != null ? String(row.longitude) : "");
         setWhen(row.captured_at ? row.captured_at.slice(0, 16) : "");
         setStationId(row.station_id || "");
+        setCountry(row.country || "");
+        setProjectId(row.project_id || "");
         setNotes(row.notes || "");
       })
       .catch((e) => setError(e.message));
@@ -50,7 +56,22 @@ export default function ObservationDetailPage() {
 
   useEffect(load, [id]);
   useEffect(() => {
-    api.stations().then(setStations).catch(() => undefined);
+    api.stations(projectId || undefined).then(setStations).catch(() => undefined);
+  }, [projectId]);
+  useEffect(() => {
+    api
+      .me()
+      .then((me) => {
+        if (!isScientist(me.role)) return;
+        return api.portfolio().then((p) => {
+          const list = (p?.projects || []).map((row: { id: string; name: string }) => ({
+            id: row.id,
+            name: row.name,
+          }));
+          setProjects(list);
+        });
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -98,6 +119,8 @@ export default function ObservationDetailPage() {
           captured_at: when || undefined,
           station_id: stationId || undefined,
           notes: notes || undefined,
+          country: country.trim() || null,
+          project_id: projectId || undefined,
         }),
       );
     } catch (err) {
@@ -307,7 +330,7 @@ export default function ObservationDetailPage() {
                 </span>
               ) : (
                 <input
-                  className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2.5 text-[15px] text-ink"
+                  className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2.5 text-[15px]"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={showNameField ? "Type a jaguar name, e.g. Itzel" : "Not named yet — match or register below"}
@@ -347,7 +370,7 @@ export default function ObservationDetailPage() {
               </span>
               <input
                 type="datetime-local"
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
                 value={when}
                 onChange={(e) => setWhen(e.target.value)}
               />
@@ -355,9 +378,25 @@ export default function ObservationDetailPage() {
 
             <label className="block text-[12px]">
               <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Project</span>
-              <span className="mt-1 block rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-[14px] text-ink">
-                {obs.project_name || "—"}
-              </span>
+              <select
+                className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
+                value={projectId}
+                onChange={(e) => {
+                  setProjectId(e.target.value);
+                  setStationId("");
+                }}
+              >
+                {(projects.length
+                  ? projects
+                  : obs.project_id
+                    ? [{ id: obs.project_id, name: obs.project_name || "Current project" }]
+                    : []
+                ).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="block text-[12px] sm:col-span-2">
@@ -365,7 +404,7 @@ export default function ObservationDetailPage() {
                 Location{obs.missing_location ? " · required" : ""}
               </span>
               <select
-                className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
                 value={stationId}
                 onChange={(e) => {
                   const next = e.target.value;
@@ -388,16 +427,20 @@ export default function ObservationDetailPage() {
 
             <label className="block text-[12px]">
               <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Country</span>
-              <span className="mt-1 block rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-[14px] text-ink">
-                {obs.country || "—"}
-              </span>
+              <input
+                className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="e.g. Costa Rica"
+                autoComplete="country-name"
+              />
             </label>
 
             <div className="grid grid-cols-2 gap-2 sm:col-span-1">
               <label className="block text-[12px]">
                 <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Latitude</span>
                 <input
-                  className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                  className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
                   placeholder="e.g. 8.54012"
                   value={lat}
                   onChange={(e) => {
@@ -409,7 +452,7 @@ export default function ObservationDetailPage() {
               <label className="block text-[12px]">
                 <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Longitude</span>
                 <input
-                  className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+                  className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
                   placeholder="e.g. -83.50741"
                   value={lng}
                   onChange={(e) => {
@@ -456,7 +499,7 @@ export default function ObservationDetailPage() {
           <label className="block text-[12px]">
             <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Scientific notes</span>
             <textarea
-              className="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] text-ink"
+              className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
               rows={3}
               placeholder="Scientific notes for this photo…"
               value={notes}

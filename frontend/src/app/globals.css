@@ -537,8 +537,25 @@ thead th {
 .ops textarea {
   background: #0c1210;
   border: 1px solid var(--line);
-  color: var(--ink);
+  color: #e6ede8;
   border-radius: 6px;
+  color-scheme: dark;
+}
+
+.ops input:not([type="file"])::placeholder,
+.ops textarea::placeholder {
+  color: #8a9a92;
+}
+
+.ops input:not([type="file"])::selection,
+.ops textarea::selection {
+  background: #c4a35a;
+  color: #070a09;
+}
+
+.ops select option {
+  background: #0c1210;
+  color: #e6ede8;
 }
 
 .ops input:not([type="file"]):focus,
@@ -546,6 +563,15 @@ thead th {
 .ops textarea:focus {
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.18);
+  outline: none;
+}
+
+/* Kill light-theme utility overrides that hide text in the ops shell */
+.ops input.bg-white,
+.ops select.bg-white,
+.ops textarea.bg-white {
+  background: #0c1210 !important;
+  color: #e6ede8 !important;
 }
 
 .ops .leaflet-container {

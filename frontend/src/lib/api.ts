@@ -70,6 +70,7 @@ export type OrgTeamResponse = {
 
 export type Detection = {
   id: string;
+  project_id?: string;
   project_name: string | null;
   country?: string | null;
   region?: string | null;

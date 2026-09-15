@@ -5,6 +5,12 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { SightingsMap } from "@/components/SightingsMap";
 import { GradeBadge, ReviewStateBadge } from "@/components/GradeBadge";
+import {
+  CANDIDATE_SCORE_HELP,
+  FLANK_HELP,
+  InfoTip,
+  SIMILARITY_SCORE_HELP,
+} from "@/components/InfoTip";
 import { api, mediaSrc, type Detection, type Individual, type Movement, type Station, type User } from "@/lib/api";
 import { isAdmin, isScientist } from "@/lib/roles";
 import { useProjectId } from "@/lib/useProjectId";
@@ -280,11 +286,16 @@ export default function IndividualProfilePage() {
                     ["Location", selected.station_name || selected.station_code || "—"],
                     ["Country", selected.country || ind.country || "—"],
                     ["Coordinates", fmtCoords(selected.latitude, selected.longitude)],
-                    ["Flank", flankLabel(selected.side)],
+                    ["Flank", flankLabel(selected.side), FLANK_HELP],
                     ["Camera", [selected.camera_make, selected.camera_model].filter(Boolean).join(" ") || "—"],
-                  ].map(([label, value]) => (
-                    <div key={label}>
-                      <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">{label}</dt>
+                  ].map(([label, value, help]) => (
+                    <div key={label as string}>
+                      <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">
+                        <span className="inline-flex items-center">
+                          {label}
+                          {help ? <InfoTip label={`About ${label}`}>{help as string}</InfoTip> : null}
+                        </span>
+                      </dt>
                       <dd className="mt-0.5">{value}</dd>
                     </div>
                   ))}
@@ -301,7 +312,10 @@ export default function IndividualProfilePage() {
 
           {candidates.length > 0 && (
             <div className="surface p-4">
-              <p className="section-title mb-2">Capture candidates</p>
+              <p className="section-title mb-2 inline-flex items-center">
+                Capture candidates
+                <InfoTip label="About candidate scores">{CANDIDATE_SCORE_HELP}</InfoTip>
+              </p>
               <p className="mb-3 text-[12.5px] text-ink/45">
                 Ranked from the method record. Identity is never assigned automatically.
               </p>
@@ -311,7 +325,9 @@ export default function IndividualProfilePage() {
                     <Link href={`/individuals/${c.code}`} className="hover:text-gold">
                       {c.display_name} <span className="font-mono text-[12px] text-ink/45">{c.code}</span>
                     </Link>
-                    <span className="font-mono text-[12px]">{(c.score * 100).toFixed(0)}%</span>
+                    <span className="font-mono text-[12px]" title={SIMILARITY_SCORE_HELP}>
+                      {(c.score * 100).toFixed(0)}%
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -380,21 +396,29 @@ export default function IndividualProfilePage() {
           <div className="surface p-5">
             <p className="section-title mb-3">Method record</p>
             <dl className="space-y-3 text-[13px]">
-              {[
-                ["Recognition method", provenance?.engine || "—"],
-                ["Model / calibration", provenance?.model_version || "—"],
+              {(
                 [
-                  "Similarity score",
-                  provenance?.match_score != null ? `${(provenance.match_score * 100).toFixed(0)}%` : "—",
-                ],
-                ["Flank", flankLabel(provenance?.side)],
-                ["Observer", provenance?.uploader_name || "—"],
-                ["Confirmed by", provenance?.reviewer_name || "Not yet confirmed"],
-                ["Second review", provenance?.second_reviewer_name || "Pending"],
-                ["Review status", provenance?.review_state?.replaceAll("_", " ") || "—"],
-              ].map(([label, value]) => (
+                  ["Recognition method", provenance?.engine || "—"],
+                  ["Model / calibration", provenance?.model_version || "—"],
+                  [
+                    "Similarity score",
+                    provenance?.match_score != null ? `${(provenance.match_score * 100).toFixed(0)}%` : "—",
+                    SIMILARITY_SCORE_HELP,
+                  ],
+                  ["Flank", flankLabel(provenance?.side), FLANK_HELP],
+                  ["Observer", provenance?.uploader_name || "—"],
+                  ["Confirmed by", provenance?.reviewer_name || "Not yet confirmed"],
+                  ["Second review", provenance?.second_reviewer_name || "Pending"],
+                  ["Review status", provenance?.review_state?.replaceAll("_", " ") || "—"],
+                ] as [string, string, string?][]
+              ).map(([label, value, help]) => (
                 <div key={label}>
-                  <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">{label}</dt>
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-ink/45">
+                    <span className="inline-flex items-center">
+                      {label}
+                      {help ? <InfoTip label={`About ${label}`}>{help}</InfoTip> : null}
+                    </span>
+                  </dt>
                   <dd className="mt-0.5">{value}</dd>
                 </div>
               ))}
@@ -582,7 +606,13 @@ function CatalogEditor({
       </label>
       <label className="block">
         <span className="text-ink/45">Country</span>
-        <input className="mt-1 w-full" value={country} onChange={(e) => setCountry(e.target.value)} />
+        <input
+          className="mt-1 w-full"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          placeholder="e.g. Costa Rica"
+          autoComplete="country-name"
+        />
       </label>
       <label className="block">
         <span className="text-ink/45">Region</span>
@@ -592,7 +622,7 @@ function CatalogEditor({
         <span className="text-ink/45">Project</span>
         <select className="mt-1 w-full" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
           {[...projects, { id: individual.project_id, name: individual.project_name || "Current project" }]
-            .filter((row, index, all) => all.findIndex((item) => item.id === row.id) === index)
+            .filter((row, index, all) => row.id && all.findIndex((item) => item.id === row.id) === index)
             .map((row) => (
               <option key={row.id} value={row.id}>
                 {row.name}
@@ -742,7 +772,10 @@ function SightingEditor({
         <input className="mt-1 w-full" value={country} onChange={(e) => setCountry(e.target.value)} />
       </label>
       <label className="block">
-        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Flank</span>
+        <span className="inline-flex items-center text-[11px] uppercase tracking-[0.12em] text-ink/45">
+          Flank
+          <InfoTip label="About flank">{FLANK_HELP}</InfoTip>
+        </span>
         <select className="mt-1 w-full" value={side} onChange={(e) => setSide(e.target.value)}>
           {FLANKS.map((row) => (
             <option key={row.value} value={row.value}>
@@ -750,6 +783,33 @@ function SightingEditor({
             </option>
           ))}
         </select>
+      </label>
+      <label className="block sm:col-span-2">
+        <span className="mb-1 block text-[11px] uppercase tracking-[0.12em] text-ink/45">Pin on map</span>
+        <SightingsMap
+          height={220}
+          pickable
+          pickHint="Click to place the jaguar pin"
+          pin={
+            lat && lng && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
+              ? { lat: Number(lat), lng: Number(lng) }
+              : null
+          }
+          points={stations
+            .filter((s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude))
+            .map((s) => ({
+              lat: s.latitude,
+              lng: s.longitude,
+              label: s.name || s.code,
+              kind: "station",
+              station_code: s.code,
+            }))}
+          onPick={(nextLat, nextLng) => {
+            setLat(String(nextLat));
+            setLng(String(nextLng));
+            setStationId("");
+          }}
+        />
       </label>
       <label className="block">
         <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Latitude</span>

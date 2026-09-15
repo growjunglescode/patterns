@@ -15,6 +15,7 @@ from app.roles import canonical_role
 from app.config import get_settings
 from app.db import get_db
 from app.models import CameraStation, CoatEmbedding, Detection, Individual, Media, NamingClaim, Project, User
+from app.org_policy import apply_project_scope, user_can_access_project
 from app.schemas import AssertSpeciesRequest, ConfirmRequest, DetectionOut, MetadataPatch
 from app.services import get_storage
 from app.services.exif import extract_exif
@@ -25,6 +26,7 @@ from app.services.identity import (
     grade_detection,
     next_code,
 )
+from app.services.onboarding import resolve_user_project
 from app.services.species import canonical_species, is_identifiable_species, normalize_side, require_jaguar
 from app.services.recognition import (
     REVIEW_AWAITING_SECOND,
@@ -139,12 +141,12 @@ async def upload(
     project = None
     if project_id:
         project = db.get(Project, project_id)
+        if project and not user_can_access_project(db, user, project):
+            raise HTTPException(status_code=404, detail="Project not found")
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
     if not project:
-        from app.services.onboarding import resolve_user_project
-
         project = resolve_user_project(db, user)
-    if not project:
-        project = db.scalar(select(Project).limit(1))
     if not project:
         raise HTTPException(status_code=400, detail="No project available — finish profile setup first")
 
@@ -319,10 +321,9 @@ def list_detections(
         )
         .order_by(Detection.created_at.desc())
     )
+    stmt = apply_project_scope(stmt, Detection.project_id, db, user, project_id)
     if grade:
         stmt = stmt.where(Detection.grade == grade)
-    if project_id:
-        stmt = stmt.where(Detection.project_id == project_id)
     if individual_id:
         stmt = stmt.where(Detection.individual_id == individual_id)
     if review_state:
@@ -340,6 +341,9 @@ def get_detection(
 ) -> DetectionOut:
     detection = _load(db, detection_id)
     if not detection:
+        raise HTTPException(status_code=404, detail="Detection not found")
+    project = detection.project or db.get(Project, detection.project_id)
+    if not user_can_access_project(db, user, project):
         raise HTTPException(status_code=404, detail="Detection not found")
     candidates = _rank_detection(db, detection)
     return detection_out(db, detection, user, candidates, include_match_library=True)
@@ -564,6 +568,20 @@ def patch_metadata(
                 area = current.split(",", 1)[0].strip()
             country = (payload.country or "").strip()
             project.region = f"{area} · {country}".strip(" ·") if country else area or None
+    if "project_id" in fields and payload.project_id:
+        from app.org_policy import user_can_access_project
+
+        next_project = db.get(Project, payload.project_id)
+        if not next_project or not user_can_access_project(db, user, next_project):
+            raise HTTPException(status_code=404, detail="Project not found")
+        if next_project.id != detection.project_id:
+            detection.project_id = next_project.id
+            # Station belongs to the previous project — clear if it no longer applies
+            if detection.station_id:
+                station = db.get(CameraStation, detection.station_id)
+                if not station or station.project_id != next_project.id:
+                    detection.station_id = None
+            detection.metadata_source = f"{detection.metadata_source or ''},manual_project".strip(",")
 
     detection.grade = grade_detection(db, detection)
     db.commit()

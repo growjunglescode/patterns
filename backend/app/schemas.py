@@ -302,6 +302,7 @@ class MetadataPatch(BaseModel):
     camera_make: str | None = Field(default=None, max_length=80)
     camera_model: str | None = Field(default=None, max_length=80)
     country: str | None = Field(default=None, max_length=80)
+    project_id: str | None = None
 
 
 class NamingClaimOut(BaseModel):
