@@ -552,43 +552,82 @@ thead th {
 .ops input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
 .ops select,
 .ops textarea {
-  background: #0c1210;
-  border: 1px solid var(--line);
-  color: #e6ede8;
+  background: #151c18 !important;
+  border: 1px solid #3a4a42 !important;
+  color: #f2f6f3 !important;
+  -webkit-text-fill-color: #f2f6f3 !important;
+  caret-color: #f2f6f3;
   border-radius: 6px;
   color-scheme: dark;
 }
 
 .ops input:not([type="file"])::placeholder,
 .ops textarea::placeholder {
-  color: #8a9a92;
+  color: #9aaba2 !important;
+  -webkit-text-fill-color: #9aaba2 !important;
+  opacity: 1;
 }
 
 .ops input:not([type="file"])::selection,
 .ops textarea::selection {
-  background: #c4a35a;
-  color: #070a09;
+  background: #c4a35a !important;
+  color: #070a09 !important;
+  -webkit-text-fill-color: #070a09 !important;
 }
 
 .ops select option {
-  background: #0c1210;
-  color: #e6ede8;
+  background: #151c18;
+  color: #f2f6f3;
 }
 
 .ops input:not([type="file"]):focus,
 .ops select:focus,
 .ops textarea:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.18);
+  border-color: #c4a35a !important;
+  box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.22);
   outline: none;
 }
 
-/* Kill light-theme utility overrides that hide text in the ops shell */
-.ops input.bg-white,
-.ops select.bg-white,
-.ops textarea.bg-white {
-  background: #0c1210 !important;
-  color: #e6ede8 !important;
+/* Chrome/Safari autofill paints dark text on cream — force readable ops values */
+.ops input:-webkit-autofill,
+.ops input:-webkit-autofill:hover,
+.ops input:-webkit-autofill:focus,
+.ops textarea:-webkit-autofill,
+.ops select:-webkit-autofill {
+  -webkit-text-fill-color: #f2f6f3 !important;
+  caret-color: #f2f6f3;
+  box-shadow: 0 0 0 1000px #151c18 inset !important;
+  transition: background-color 99999s ease-out;
+}
+
+.ops .field-control {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  min-height: 2.6rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid #4a5c54 !important;
+  background: #1a2320 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.ops .field-control:focus {
+  border-color: #c4a35a !important;
+  box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.28);
+}
+
+.ops .field-label {
+  display: block;
+  color: #c4a35a !important;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .ops .leaflet-container {

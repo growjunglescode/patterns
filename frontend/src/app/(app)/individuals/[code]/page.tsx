@@ -605,22 +605,22 @@ function CatalogEditor({
         </select>
       </label>
       <label className="block">
-        <span className="text-ink/45">Country</span>
+        <span className="field-label">Country</span>
         <input
-          className="mt-1 w-full"
+          className="field-control"
           value={country}
           onChange={(e) => setCountry(e.target.value)}
           placeholder="e.g. Costa Rica"
-          autoComplete="country-name"
+          autoComplete="off"
         />
       </label>
       <label className="block">
-        <span className="text-ink/45">Region</span>
-        <input className="mt-1 w-full" value={region} onChange={(e) => setRegion(e.target.value)} />
+        <span className="field-label">Region</span>
+        <input className="field-control" value={region} onChange={(e) => setRegion(e.target.value)} />
       </label>
       <label className="block">
-        <span className="text-ink/45">Project</span>
-        <select className="mt-1 w-full" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+        <span className="field-label">Project</span>
+        <select className="field-control" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
           {[...projects, { id: individual.project_id, name: individual.project_name || "Current project" }]
             .filter((row, index, all) => row.id && all.findIndex((item) => item.id === row.id) === index)
             .map((row) => (
@@ -768,8 +768,14 @@ function SightingEditor({
         </select>
       </label>
       <label className="block">
-        <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Country</span>
-        <input className="mt-1 w-full" value={country} onChange={(e) => setCountry(e.target.value)} />
+        <span className="field-label">Country</span>
+        <input
+          className="field-control"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          placeholder="e.g. Costa Rica"
+          autoComplete="off"
+        />
       </label>
       <label className="block">
         <span className="inline-flex items-center text-[11px] uppercase tracking-[0.12em] text-ink/45">

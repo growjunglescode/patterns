@@ -377,15 +377,16 @@ export default function ObservationDetailPage() {
             </label>
 
             <label className="block text-[12px]">
-              <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Project</span>
+              <span className="field-label">Project</span>
               <select
-                className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
+                className="field-control"
                 value={projectId}
                 onChange={(e) => {
                   setProjectId(e.target.value);
                   setStationId("");
                 }}
               >
+                {!projectId && <option value="">Select project</option>}
                 {(projects.length
                   ? projects
                   : obs.project_id
@@ -426,13 +427,13 @@ export default function ObservationDetailPage() {
             </label>
 
             <label className="block text-[12px]">
-              <span className="text-[11px] uppercase tracking-[0.12em] text-ink/45">Country</span>
+              <span className="field-label">Country</span>
               <input
-                className="mt-1 w-full rounded-lg border border-[var(--line)] px-3 py-2 text-[14px]"
+                className="field-control"
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 placeholder="e.g. Costa Rica"
-                autoComplete="country-name"
+                autoComplete="off"
               />
             </label>
 
